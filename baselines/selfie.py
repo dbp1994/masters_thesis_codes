@@ -114,8 +114,6 @@ def selfie_train(epoch, ep_warm_up, hist_lim, uncertainty_thres, max_uncertainty
                 idx_refurb_batch = (torch.Tensor(idx_refurb_batch)).type(torch.LongTensor)
             
 
-                # if batch_id == 0:
-                #     print("\nBefore: y - \n {} \n".format(y[list(map(int,idx_refurb_batch.tolist()))]))
                 ## clean the labels for the batch and in the actual dataset
                 refurb_lab = torch.argmax(pred_freq[list(map(int, idx_refurb_batch.tolist())),:], dim=1)
                 refurb_lab = refurb_lab.to(device)
@@ -123,8 +121,6 @@ def selfie_train(epoch, ep_warm_up, hist_lim, uncertainty_thres, max_uncertainty
                 y = y.type(torch.LongTensor)
                 dataset_train.tensors[1][list(map(int,idx_refurb_tmp_ref.tolist()))] = refurb_lab.type(torch.FloatTensor)
 
-                # if batch_id == 0:
-                #     print("\nAfter: y - \n {} \n".format(y[list(map(int,idx_refurb_batch.tolist()))]))
 
                 ## store the indices of refurbished samples for 
                 ## algorithm comparison and analysis 
@@ -136,22 +132,6 @@ def selfie_train(epoch, ep_warm_up, hist_lim, uncertainty_thres, max_uncertainty
 
                 ## low-loss valued + refurbished samples
                 idx_selfie = torch.unique(torch.cat((idx_low_loss.to(device), idx_refurb_batch.to(device)), dim=0))
-
-                # if batch_id == 0:
-                #     print("\n Batch {} \n idx_refurb_tmp_ref ({}): \n{}\n---\n".format(batch_id, idx_refurb_tmp_ref.shape, idx_refurb_tmp_ref))
-                #     print("\n idx_sort_frac ({}): \n{}\n---\n".format(idx_sort[0:int((1.0- noise_rate) * x.shape[0])].shape, 
-                #                                                 idx_sort[0:int((1.0- noise_rate) * x.shape[0])]))
-                #     print("\n idx_sort ({}): \n{}\n---\n".format(idx_sort.shape, idx_sort))
-                #     print("\n idx_low_loss ({}): \n{}\n---\n".format(idx_low_loss.shape, idx_low_loss))
-                #     print("\n pred_freq ({}): \n{}\n---\n".format(pred_freq[0:15].shape, pred_freq[0:15]))
-                #     print("\n H_post_prob:\n {}\n---\n".format(H_post_prob[list(map(int, idx[0:15].tolist())),:]))
-                #     print("\n H_log_prob:\n {}\n---\n".format(H_log_prob[0:15,:]))
-                #     print("\n H_uncertain:\n {}\n---\n".format(H_uncertain[list(map(int, idx[0:15].tolist()))]))
-                #     print("\n idx_refurb_tmp ({}): \n{}\n---\n".format(idx_refurb_tmp.shape, idx_refurb_tmp))
-                #     print("\n idx_refurb_batch ({}): \n{}\n---\n".format(idx_refurb_batch.shape, idx_refurb_batch))
-                #     print("\n idx_selfie ({}): \n{}\n---\n".format(idx_selfie.shape, idx_selfie))
-                #     print("\n idx_refurb_epoch ({}): \n{}\n---\n".format(idx_refurb_epoch.shape, idx_refurb_epoch))
-                #     input("Press <ENTER> to continue...\n")
 
             else:
                 ## Picking only the low-loss valued samples
@@ -296,26 +276,13 @@ class mem_NN(nn.Module):
     def __init__(self):
         super(mem_NN, self).__init__()
 
-        # self.fc1 = nn.Linear(2, 512)
-        # self.fc2 = nn.Linear(512, 64)
-        # self.fc3 = nn.Linear(64, 16)
-        # self.fc4 = nn.Linear(16, 8)
-        # self.fc5 = nn.Linear(8, 4)
-
         self.fc1 = nn.Linear(2, 32)
         self.fc2 = nn.Linear(32, 16)
         self.fc4 = nn.Linear(16, 8)
         self.fc5 = nn.Linear(8, 4)
 
         self.dr1 = nn.Dropout(0.2)
-        # self.dr2 = nn.Dropout(0.2)
-        # self.dr3 = nn.Dropout(0.2)
-
-        # self.bn1 = nn.BatchNorm1d(512)
-        # self.bn2 = nn.BatchNorm1d(64)
-        # self.bn3 = nn.BatchNorm1d(16)
-        # self.bn4 = nn.BatchNorm1d(8)
-        
+	
         self.bn1 = nn.BatchNorm1d(32)
         self.bn2 = nn.BatchNorm1d(16)
         self.bn4 = nn.BatchNorm1d(8)
@@ -323,13 +290,8 @@ class mem_NN(nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = self.bn1(x)
-        # x = self.dr1(x)
         x = F.relu(self.fc2(x))
         x = self.bn2(x)
-        # x = self.dr2(x)
-        ## x = F.relu(self.fc3(x))
-        ## x = self.bn3(x)
-        # x = self.dr3(x)
         x = F.relu(self.fc4(x))
         x = self.bn4(x)
         x = F.relu(self.fc5(x))
@@ -744,54 +706,3 @@ for run in range(num_runs):
             print("\nelapsed time: \n", elapsed)
 
 
-            """
-            Plot results and save FIG
-            """
-
-            # plot_selfie(dataset, noise_rate, noise_type, run, hist_lim, uncertainty_thres)
-
-"""
-# correction log
-
-if method == "selfie":
-    num_corrected_sample = 0
-    num_correct_corrected_sample = 0
-
-    samples = train_batch_patcher.loaded_data
-    for sample in samples:
-        if sample.corrected:
-            num_corrected_sample += 1
-            if sample.true_label == sample.last_corrected_label:
-                num_correct_corrected_sample += 1
-
-    if num_corrected_sample != 0:
-        print("Label correction of ""refurbishable"" samples : ",(epoch + cur_epoch + 1), ": ", num_correct_corrected_sample, "/", num_corrected_sample, "( ", float(num_correct_corrected_sample)/float(num_corrected_sample), ")")
-        if correction_log is not None:
-            correction_log.append(str(epoch + cur_epoch + 1) + ", " + str(num_correct_corrected_sample) + ", " + str(num_corrected_sample) + ", " + str(float(num_correct_corrected_sample)/float(num_corrected_sample)))
-
-"""
-
-
-"""
-You can compute the F-score yourself in pytorch. The F1-score is defined for single-class (true/false) 
-classification only. The only thing you need is to aggregating the number of:
-      Count of the class in the ground truth target data;
-      Count of the class in the predictions;
-      Count how many times the class was correctly predicted.
-
-Let's assume you want to compute F1 score for the class with index 0 in your softmax. In every batch, you can do:
-
-predicted_classes = torch.argmax(y_pred, dim=1) == 0
-target_classes = self.get_vector(y_batch)
-target_true += torch.sum(target_classes == 0).float()
-predicted_true += torch.sum(predicted_classes).float()
-correct_true += torch.sum(
-    predicted_classes == target_classes * predicted_classes == 0).float()
-
-When all batches are processed:
-
-recall = correct_true / target_true
-precision = correct_true / predicted_true
-f1_score = 2 * precission * recall / (precision + recall)
-
-"""
