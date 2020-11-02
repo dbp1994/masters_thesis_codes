@@ -20,7 +20,9 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.autograd import Variable
+from torchvision.models.resnet import ResNet, BasicBlock
 from torch.utils.tensorboard import SummaryWriter
+import torch.utils.model_zoo as model_zoo
 
 from data import *
 from adversarial_attacks import *
@@ -41,6 +43,63 @@ def accuracy(true_label, pred_label):
 	err = [1 if (pred_label[i] != true_label[i]).sum()==0 else 0 for i in range(num_samples)]
 	acc = 1 - (sum(err)/num_samples)
 	return acc
+
+# def MNIST_ResNet18(pretrained=True, **kwargs):
+
+#     model = ResNet(BasicBlock, [2, 2, 2, 2], num_classes=10, **kwargs)
+#     if pretrained == True:
+#         model.load_state_dict(model_zoo.load_url('https://download.pytorch.org/models/resnet18-5c106cde.pth'))
+
+#     model.conv1 = nn.Conv2d(1, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)
+#     return model
+
+
+class MNIST_CNN(nn.Module):
+    def __init__(self):
+        super(MNIST_CNN, self).__init__()
+
+        # 1 I/P channel, 6 O/P channels, 5x5 conv. kernel
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=6, kernel_size=5, padding=2)
+        self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=5)
+        self.conv3 = nn.Conv2d(in_channels=16, out_channels=120, kernel_size=5)
+
+        self.bn1 = nn.BatchNorm2d(6)
+        self.bn2 = nn.BatchNorm2d(16)
+        self.bn3 = nn.BatchNorm2d(120)
+
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+
+        # self.fc1 = nn.Linear(400, 120)
+        self.fc1 = nn.Linear(120, 84)
+        self.fc2 = nn.Linear(84, 10)
+    
+    def forward(self, x, get_feat=False):
+
+        # x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2), stride=2)
+        # x = F.max_pool2d(F.relu(self.conv2(x)), (2, 2), stride=2)
+        x = self.pool1(F.relu(self.conv1(x)))
+        x = self.bn1(x)
+        x = self.pool2(F.relu(self.conv2(x)))
+        x = self.bn2(x)
+        x = F.relu(self.conv3(x))
+        x = self.bn3(x)
+        x = x.view(-1, self.num_flat_features(x))
+        x = F.relu(self.fc1(x))
+        feat = x.clone().reshape(x.shape[0], -1)
+        x = F.relu(self.fc2(x))
+        
+        if get_feat:
+            return x, feat
+        else:
+            return x
+
+    def num_flat_features(self, x):
+        size = x.size()[1:] # all dims except batch_size dim
+        num_features = 1
+        for s in size:
+            num_features *= s
+        return num_features
 
 
 class MNIST_MetaNN(nn.Module):
@@ -63,7 +122,7 @@ class MNIST_MetaNN(nn.Module):
         self.fc1 = nn.Linear(120, 84)
         self.fc2 = nn.Linear(84, 10)
 
-    def batchnorm(self, input, weight=None, bias=None, running_mean=None, 
+    def batch_norm(self, input, weight=None, bias=None, running_mean=None, 
                 running_var=None, training=True, eps=1e-5, momentum=0.1):
 
         ''' momentum = 1 restricts stats to the current mini-batch '''
@@ -88,17 +147,17 @@ class MNIST_MetaNN(nn.Module):
             x = F.relu(self.fc1(x))
             x = F.relu(self.fc2(x))
         else:
-            x = F.relu(F.conv2d(x, weights[0], weights[1]))
-            x = F.MaxPool2d(x, kernel_size=2, stride=2)
+            x = F.relu(F.conv2d(x, weight=weights[0], bias=weights[1], padding=2))
+            x = F.max_pool2d(x, kernel_size=2, stride=2)
             x = self.batch_norm(x, weight=weights[6], bias=weights[7], momentum=1)
-            x = F.relu(F.conv2d(x, weights[2], weights[3]))
-            x = F.MaxPool2d(x, kernel_size=2, stride=2)
+            x = F.relu(F.conv2d(x, weight=weights[2], bias=weights[3]))
+            x = F.max_pool2d(x, kernel_size=2, stride=2)
             x = self.batch_norm(x, weight=weights[8], bias=weights[9], momentum=1)
-            x = F.relu(F.conv2d(x, weights[4], weights[5]))
+            x = F.relu(F.conv2d(x, weight=weights[4], bias=weights[5]))
             x = self.batch_norm(x, weight=weights[10], bias=weights[11], momentum=1)
             x = x.view(-1, self.num_flat_features(x))
-            x = F.relu(F.linear(x, weights[12], weights[13]))
-            x = F.relu(F.linear(x, weights[14], weights[15]))
+            x = F.relu(F.linear(x, weight=weights[12], bias=weights[13]))
+            x = F.relu(F.linear(x, weight=weights[14], bias=weights[15]))
 
         return x
 
@@ -111,7 +170,7 @@ class MNIST_MetaNN(nn.Module):
         return num_features
 
 
-def meta_mlnt_train(train_loader, model_tch, model_stud, first_order=False):
+def meta_mlnt_train(train_loader, model_tch, model_stud, pretrained_net, first_order=False):
 
     """
     Code inspired from:
@@ -130,6 +189,7 @@ def meta_mlnt_train(train_loader, model_tch, model_stud, first_order=False):
 
     model_tch.train()
     model_stud.train()
+    pretrained_net.eval()
 
     loss_train_agg = np.zeros((len(train_loader.dataset), ))
     acc_train_agg = np.zeros((len(train_loader.dataset), ))
@@ -159,6 +219,9 @@ def meta_mlnt_train(train_loader, model_tch, model_stud, first_order=False):
         output_tch.detach_()
         # loss_pass_1 = loss_fn(output_stud, y)
 
+        with torch.no_grad():
+            _, output_pretrain = pretrained_net(x, get_feat=True)
+
         optimizer.zero_grad()
         # loss_pass_1.mean().backward(retain_graph=True)
 
@@ -169,24 +232,34 @@ def meta_mlnt_train(train_loader, model_tch, model_stud, first_order=False):
             tmp_wts_2 = []
 
             idx_perm = torch.randperm(y.shape[0])
-            y_perm = y.clone().detach()
+            y_perm = y.clone()
             for i in range(rho):
                 idx_nbr = idx_perm[i]
-                x_tmp_ref = x[idx_nbr,:,:,:].clone().detach()
-                x_tmp_ref.view(1,x_tmp_ref.shape[0])
-                x_tmp_ref = x_tmp_ref.expand(y.shape[0], x.shape[0])
-                dist = torch.sum((x_tmp_ref - x.reshape(x.shape[0],-1))**2, dim=1)
+                x_tmp_ref = output_pretrain[idx_nbr,:]
+                # x_tmp_ref.view(1,x_tmp_ref.shape[0])
+                x_tmp_ref = x_tmp_ref.expand(y.shape[0], x_tmp_ref.shape[0])
+                # print(x_tmp_ref.shape)
+                # print(output_pretrain.shape)
+                # print(x_tmp_ref[1:3,:])
+                # input("\nWait\n")
+                dist = torch.sum((x_tmp_ref - output_pretrain)**2, dim=1)
                 _, neighbours = torch.topk(dist, num_neighbours+1, largest=False)
                 y_perm[idx_nbr] = y[neighbours[random.randint(1, num_neighbours)]]
             
             if not first_order:
                 tmp_wts = [w.clone() for w in model_stud.parameters()]
+                
+                # for w in tmp_wts:
+                #     print(f"\n{w.shape}\n")
+                
+                # input("\nWait.\n")
+
                 loss_pass_task = loss_fn(model_stud(x, tmp_wts), y_perm)
-                grads_task = torch.autograd.grad(loss_pass_task, tmp_wts)
+                grads_task = torch.autograd.grad(loss_pass_task.mean(), tmp_wts)
                 tmp_wts_2 = [w - task_lr * grad for w, grad in zip(tmp_wts, grads_task)]
             else:
                 loss_pass_task = loss_fn(model_stud(x), y_perm)
-                grads_task = torch.autograd.grad(loss_pass_task, model_stud.parameters(), 
+                grads_task = torch.autograd.grad(loss_pass_task.mean(), model_stud.parameters(), 
                             create_graph=True, retain_graph=True, only_inputs=True)
 
                 for g in grads_task:
@@ -197,7 +270,7 @@ def meta_mlnt_train(train_loader, model_tch, model_stud, first_order=False):
             loss_consistency = (1/M)* KL_loss(F.log_softmax(model_stud(x, tmp_wts_2), dim=1), F.softmax(output_tch, dim=1))
             loss_meta += loss_consistency
 
-        grads_meta = torch.autograd.grad(loss_meta, model_stud.parameters())
+        grads_meta = torch.autograd.grad(loss_meta.mean(), model_stud.parameters())
 
         tmp_wts = [w.clone() for w in model_stud.parameters()]
         tmp_wts_2 = [w - meta_lr * grad for w, grad in zip(model_stud.parameters(), grads_meta)]
@@ -219,7 +292,7 @@ def meta_mlnt_train(train_loader, model_tch, model_stud, first_order=False):
         loss_fin = loss_fn(output, y)
         pred_prob = F.softmax(output, dim=1)
         pred = torch.argmax(pred_prob, dim=1)
-        loss_train += loss_fin.mean().item() # .item() for scalars, .tolist() in general
+        loss_train_stud += loss_fin.mean().item() # .item() for scalars, .tolist() in general
         correct_stud += pred.eq(y.to(device)).sum().item()
 
         # Compute the accuracy and loss  ::: TEACHER
@@ -275,7 +348,7 @@ def test(data_loader, model, run):
 Configuration
 """
 
-num_epoch = 50
+num_epoch = 5
 batch_size = 128
 random_state = 422
 num_runs = 1 # 5
@@ -298,6 +371,8 @@ num_neighbours = 10
 gamma = 0.99 #[0.99, 0.999]
 rho = int(0.5 * batch_size) # [0.1, 0.2, 0.3, 0.4, 0.5] * batch_size
 # tau = 0.3 # to be used if MLNT is used for >=2 iterations
+
+pretrained = True
 
 
 parser = argparse.ArgumentParser(description='Meta MLNT - CVPR 2019')
@@ -419,12 +494,23 @@ for run in range(num_runs):
     if dataset == "mnist":
         model_tch = MNIST_MetaNN()
         model_stud = MNIST_MetaNN()
+        # pretrained_net = MNIST_ResNet18(pretrained=True)
+        pretrained_net = MNIST_CNN()
+        if pretrained == True:
+            path_str = "./checkpoint/samp-comp/mnist/sym/00/run_0/"
+            pretrained_net.load_state_dict(torch.load(path_str + 
+                    "samp-comp-mnist-cce-sym-nr-00-mdl-wts-run-0.pt"))
+
+        # feat_extractor = torch.nn.Sequential(*list(pretrained_net.children())[:-1])
     elif dataset in ["cifar10", "cifar100"]:
-        # model = torchvision.models.resnet18()
+        # model_tch = CIFAR_CifarNN()
+        # model_stud = CIFAR_MetaNN()
+        # pretrained_net = torchvision.models.resnet18(pretrained=True)
         pass
 
     model_tch = model_tch.to(device)
     model_stud = model_stud.to(device)
+    pretrained_net = pretrained_net.to(device)
     print(model_stud)
 
     print("\n===========\nloss: {}\n===========\n".format(loss_name))
@@ -472,6 +558,7 @@ for run in range(num_runs):
     writer.add_graph(model_stud, (torch.transpose(tensor_x_train[0].unsqueeze(1),0,1)).to(device))
     writer.close()
 
+    best_acc_val = 0.
 
     epoch_loss_train_tch = []
     epoch_acc_train_tch = []
@@ -492,7 +579,7 @@ for run in range(num_runs):
 
         #Training set performance
         loss_train_tch, acc_train_tch, loss_train_stud, acc_train_stud, loss_train_agg, acc_train_agg = meta_mlnt_train(train_loader,
-                            model_tch, model_stud, first_order=False)
+                            model_tch, model_stud, pretrained_net, first_order=False)
         writer.add_scalar('training_loss_teacher', loss_train_tch, epoch)
         writer.add_scalar('training_accuracy_teacher', acc_train_tch, epoch)
         writer.add_scalar('training_loss_student', loss_train_stud, epoch)
@@ -535,13 +622,13 @@ for run in range(num_runs):
         ##lr_scheduler_2.step()
 
         # Update best_acc_val and sample_wts_fin
-        if epoch == 1:
+        if epoch == 0:
             best_acc_val = acc_val_stud
 
-        if acc_val > best_acc_val:
+        if acc_val_stud > best_acc_val:
             best_acc_val = acc_val_stud
             best_model_wts = copy.deepcopy(model_stud.state_dict())
-            torch.save(model_stud.state_dict(), chkpt_path + chkpt_path + "%s-%s-%s-%s-nr-0%s-mdl-stud-wts-run-%s.pt" % (mode, dataset, 
+            torch.save(model_stud.state_dict(), chkpt_path + "%s-%s-%s-%s-nr-0%s-mdl-stud-wts-run-%s.pt" % (mode, dataset, 
                                 loss_name, noise_type, str(int(noise_rate * 10)), str(run)))
             print("Model weights updated...\n")
         

@@ -41,7 +41,7 @@ def accuracy(true_label, pred_label):
 	return acc
 
 
-def meta_ren_train(train_loader, X_val, y_val, model, first_order=False):
+def meta_ren_train(train_loader, X_val, y_val, model):
 
     loss_train = 0.
     acc_train = 0.
@@ -55,9 +55,6 @@ def meta_ren_train(train_loader, X_val, y_val, model, first_order=False):
 
     model.train()
 
-    meta_net = MNIST_MetaNN()
-    meta_net = meta_net.to(device)
-
     for batch_id, (x, y, idx) in tqdm(enumerate(train_loader)):
 
         y = y.type(torch.LongTensor)
@@ -68,6 +65,8 @@ def meta_ren_train(train_loader, X_val, y_val, model, first_order=False):
         x_val, y_val = X_val.to(device), y_val.to(device)
 
         # Load the current n/w params. into meta_net
+        meta_net = MNIST_MetaNN()
+        meta_net = meta_net.to(device)
         meta_net.load_state_dict(model.state_dict())
 
         # Lines 4 - 5 initial forward pass to compute the initial weighted loss
@@ -427,11 +426,11 @@ for run in range(num_runs):
     else:
         raise SystemExit("Invalid loss function\n")
 
-    # optimizer = optim.Adam(model.parameters(), lr = learning_rate)
-    optimizer = optim.SGD(model.parameters(), lr = learning_rate, momentum=0.9)
-    # optimizer = Alopex(model.parameters(), lr = learning_rate, T_const=T_const, 
+    optimizer = optim.Adam(model.params(), lr = learning_rate)
+    # optimizer = optim.SGD(model.params(), lr = learning_rate, momentum=0.9)
+    # optimizer = Alopex(model.params(), lr = learning_rate, T_const=T_const, 
     #                             N_const=N_const, model=model)
-    # opt = Alopex_2T(model.parameters(), lr = learning_rate, T_const=T_const, N_const=N_const, model=model)
+    # opt = Alopex_2T(model.params(), lr = learning_rate, T_const=T_const, N_const=N_const, model=model)
 
     lr_scheduler_1 = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                 factor=0.1, patience=5, verbose=True, threshold=0.0001,
@@ -456,11 +455,13 @@ for run in range(num_runs):
     epoch_loss_train_agg = np.zeros((len(train_loader.dataset), num_epoch))
     epoch_acc_train_agg = np.zeros((len(train_loader.dataset), num_epoch))
 
-    for epoch in range(1, num_epoch+1):
+    sample_wts_fin = np.zeros((len(train_loader.dataset), num_epoch))
+
+    for epoch in range(num_epoch):
 
         #Training set performance
         sample_wts, loss_train, acc_train, loss_train_agg, acc_train_agg = meta_ren_train(train_loader,
-                                            tensor_x_val, tensor_y_val, loss_fn, model)
+                                            tensor_x_val, tensor_y_val, model)
 
         ## log TRAIN. SET performance
         writer.add_scalar('training_loss', loss_train, epoch)
@@ -468,10 +469,10 @@ for run in range(num_runs):
         writer.close()
 
         # Validation set performance
-        loss_val, acc_val = test(val_loader, loss_fn, model, use_best=False)
+        loss_val, acc_val = test(val_loader, model, run, use_best=False)
 
         #Testing set performance
-        loss_test, acc_test = test(test_loader, loss_fn, model, use_best=False)
+        loss_test, acc_test = test(test_loader, model, run, use_best=False)
 
         ## log TEST SET performance
         writer.add_scalar('test_loss', loss_test, epoch)
@@ -493,17 +494,14 @@ for run in range(num_runs):
         epoch_acc_train.append(acc_train)
         epoch_loss_train_agg[:, epoch] = loss_train_agg
         epoch_acc_train_agg[:, epoch] = acc_train_agg    
+        sample_wts_fin[:, epoch] = sample_wts
 
         epoch_loss_test.append(loss_test)
         epoch_acc_test.append(acc_test)
 
         # Update best_acc_val and sample_wts_fin
-        if epoch == 1:
+        if epoch == 0:
             best_acc_val = acc_val
-            sample_wts_fin = sample_wts
-            # print(sample_wts)
-        else:
-            sample_wts_fin = np.concatenate((sample_wts_fin, sample_wts), axis=0)
 
         if acc_val > best_acc_val:
             best_acc_val = acc_val

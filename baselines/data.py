@@ -238,7 +238,7 @@ def read_data(noise_type, noise_rate, dataset, mode="rm"):
         y_temp = y_temp.astype(np.int32)
 
         # Pick equal no. clean samples from each class for val. set
-        if dataset == "mnist":
+        if dataset in ["mnist", "cifar10", "cifar100"]:
             num_class = 10
             for i in range(num_class):
                 idx_cls_tmp = np.where(y_temp == i)[0]

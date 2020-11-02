@@ -61,17 +61,16 @@ class MetaWeightNet(MetaModule):
         out = self.linear2(x)
         return F.sigmoid(out)
 
-def meta_net_train(epoch, train_loader, X_val, y_val, model, meta_wt_net, first_order=False):
+def meta_net_train(train_loader, X_val, y_val, model, meta_wt_net):
 
     loss_train = 0.
     acc_train = 0.
     correct = 0
 
-    sample_wts = np.zeros((len(train_loader.dataset), ))
+    sample_wts = np.zeros((len(train_loader.dataset), 1))
 
     model.train()
-    # meta_wt_net.train()
-    meta_net = MNIST_MetaNN()
+    meta_wt_net.train()
 
     loss_train_agg = np.zeros((len(train_loader.dataset), ))
     acc_train_agg = np.zeros((len(train_loader.dataset), ))
@@ -79,58 +78,62 @@ def meta_net_train(epoch, train_loader, X_val, y_val, model, meta_wt_net, first_
     for batch_id, (x, y, idx) in tqdm(enumerate(train_loader)):
 
         y = y.type(torch.LongTensor)
+        y_val = y_val.type(torch.LongTensor)
         
         # Transfer data to the GPU
         x, y, idx = x.to(device), y.to(device), idx.to(device)
         x_val, y_val = X_val.to(device), y_val.to(device)
 
+        meta_net = MNIST_MetaNN()
+        meta_net = meta_net.to(device)
         meta_net.load_state_dict(model.state_dict())
 
         y_f_hat = meta_net(x)
         loss_int = loss_fn(y_f_hat, y)
-        loss_int = loss_int.reshape(loss_int, (len(loss_int), 1))
-        # ex_wts_tmp = meta_wt_net(loss_int.clone().detach_())
+        loss_int = loss_int.reshape((len(loss_int), 1))
         with torch.no_grad():
             ex_wts_tmp = meta_wt_net(loss_int)
-        loss_tmp = torch.sum(loss_int * ex_wts_tmp) / len(loss_int)
+        loss_tmp = torch.sum(loss_int * ex_wts_tmp)
         meta_net.zero_grad()
         grads = torch.autograd.grad(loss_tmp, meta_net.params(), create_graph=True)
 
-        # For ResNet-18 and ResNet-32
+        # For ResNets
         ## interim_lr = learning_rate * (0.1**int(epoch >= 80)) * (0.1**int(epoch >= 100))
 
-        meta_net.update_params(lr_inner=interim_lr, source_params=grads)
+        meta_net.update_params(lr_inner=meta_lr, source_params=grads)
 
         y_wts_hat = meta_net(x_val)
         loss_wts = loss_fn(y_wts_hat, y_val)
-        # grads_wts = torch.autograd.grad(loss_wts, meta_wt_net.params(), create_graph=True)
-        # meta_wt_net.update_params(lr_inner=meta_lr, source_params=grads_wts)
         optimizer_wts.zero_grad()
-        loss_wts.backward()
+        loss_wts.mean().backward(create_graph=True)
         optimizer_wts.step()
 
 
         output = model(x)
-        loss_int = loss_fn(output, y)
-        loss_int = loss_int.reshape(loss_int, (len(loss_int), 1))
+        loss_batch = loss_fn(output, y)
+        loss_batch = loss_batch.reshape((len(loss_batch), 1))
 
         with torch.no_grad():
-            ex_wts = meta_wt_net(loss_int)
+            ex_wts = meta_wt_net(loss_batch)
+
+        norm_w = torch.sum(ex_wts)
+        if norm_w >= 1e-8:
+            ex_wts /= norm_w
             
-        loss_wtd = ex_wts * loss_int
+        loss_meta_net = torch.sum(ex_wts * loss_batch)
         optimizer.zero_grad()
-        loss_wtd.mean().backward()
+        loss_meta_net.backward()
         optimizer.step()
         
         # Compute the accuracy and loss for model_stud
         pred_prob = F.softmax(output, dim=1)
         pred = torch.argmax(pred_prob, dim=1)
-        loss_train += loss_wtd.mean().item() # .item() for scalars, .tolist() in general
-        correct_stud += pred.eq(y.to(device)).sum().item()
+        loss_train += loss_meta_net.item()
+        correct += pred.eq(y.to(device)).sum().item()
 
         batch_cnt = batch_id + 1
 
-        loss_train_agg[list(map(int, idx.tolist()))] = np.asarray(loss_wtd.tolist())
+        loss_train_agg[list(map(int, idx.tolist()))] = np.asarray(loss_meta_net.tolist())
         acc_train_agg[list(map(int, idx.tolist()))] = np.asarray(pred.eq(y.to(device)).tolist())
 
         sample_wts[list(map(int, (idx.to('cpu')).tolist()))] = np.asarray((ex_wts.to('cpu')).tolist())
@@ -178,7 +181,7 @@ def test(data_loader, model, run, use_best=False):
 Configuration
 """
 
-num_epoch = 50
+num_epoch = 5
 batch_size = 128
 random_state = 422
 num_runs = 1 # 5
@@ -193,8 +196,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 """
 Meta_Net hyper-params
 """
-interim_lr = 2e-3
-meta_lr = 1e-3
+meta_lr = 1e-4
 
 parser = argparse.ArgumentParser(description='Meta Weight Net - NeurIPS 2019')
 parser.add_argument('-nr','--noise_rate', default=0.4, type=float, help='noise_rate')
@@ -317,6 +319,7 @@ for run in range(num_runs):
         meta_wt_net = MetaWeightNet(1, 100, 1)
     elif dataset in ["cifar10", "cifar100"]:
         model = torchvision.models.resnet18()
+        meta_wt_net = MetaWeightNet(1, 100, 1)
 
     model = model.to(device)
     meta_wt_net = meta_wt_net.to(device)
@@ -350,9 +353,10 @@ for run in range(num_runs):
         raise SystemExit("Invalid loss function\n")
 
 
-    # optimizer = optim.Adam(model.parameters(), learning_rate)
-    optimizer = optim.SGD(model.parameters(), lr = learning_rate, momentum=0.9)
-    optimizer_wts = optim.SGD(model.parameters(), lr = learning_rate, momentum=0.9)
+    optimizer = optim.Adam(model.params(), learning_rate)
+    optimizer_wts = optim.Adam(meta_wt_net.params(), lr = learning_rate)
+    # optimizer = optim.SGD(model.params(), lr = learning_rate, momentum=0.9)
+    # optimizer_wts = optim.SGD(meta_wt_net.params(), lr = 1e-3, momentum=0.9)
 
     lr_scheduler_1 = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                 factor=0.1, patience=5, verbose=True, threshold=0.0001,
@@ -368,6 +372,7 @@ for run in range(num_runs):
     writer.add_graph(model, (torch.transpose(tensor_x_train[0].unsqueeze(1),0,1)).to(device))
     writer.close()
 
+    best_acc_val = 0.
 
     epoch_loss_train = []
     epoch_acc_train = []
@@ -384,8 +389,8 @@ for run in range(num_runs):
     for epoch in range(num_epoch):
 
         #Training set performance
-        sample_wts, loss_train, acc_train, loss_train_agg, acc_train_agg = meta_net_train(epoch, train_loader, X_val, y_val,
-                            model, meta_wt_net, first_order=False)
+        sample_wts, loss_train, acc_train, loss_train_agg, acc_train_agg = meta_net_train(train_loader, tensor_x_val, tensor_y_val,
+                            model, meta_wt_net)
         writer.add_scalar('training_loss', loss_train, epoch)
         writer.add_scalar('training_accuracy', acc_train, epoch)
         writer.close()
@@ -404,6 +409,7 @@ for run in range(num_runs):
         epoch_acc_train.append(acc_train)
         epoch_loss_train_agg[:, epoch] = loss_train_agg
         epoch_acc_train_agg[:, epoch] = acc_train_agg
+        sample_wts_fin[:, epoch] = sample_wts
 
         epoch_loss_test.append(loss_test)
         epoch_acc_test.append(acc_test)
@@ -414,17 +420,13 @@ for run in range(num_runs):
         ##lr_scheduler_2.step()
 
         # Update best_acc_val and sample_wts_fin
-        if epoch == 1:
+        if epoch == 0:
             best_acc_val = acc_val
-            sample_wts_fin = sample_wts
-            # print(sample_wts)
-        else:
-            sample_wts_fin = np.concatenate((sample_wts_fin, sample_wts), axis=0)
 
         if acc_val > best_acc_val:
             best_acc_val = acc_val
             best_model_wts = copy.deepcopy(model.state_dict())
-            torch.save(model.state_dict(), chkpt_path + chkpt_path + "%s-%s-%s-%s-nr-0%s-mdl-wts-run-%s.pt" % (mode, dataset, 
+            torch.save(model.state_dict(), chkpt_path + "%s-%s-%s-%s-nr-0%s-mdl-wts-run-%s.pt" % (mode, dataset, 
                                 loss_name, noise_type, str(int(noise_rate * 10)), str(run)))
             print("Model weights updated...\n")
 
