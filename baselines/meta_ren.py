@@ -84,74 +84,6 @@ def meta_ren_train(train_loader, X_val, y_val, model):
         meta_net.update_params(meta_lr, source_params=grads)
 
 
-#         (https://discuss.pytorch.org/t/replace-the-input-after-forward-but-before-backward/89199)
-
-#         For the nn.Module version, note that the optimizer step and model state dict loading are both done in a non-differentiable manner. So these ops will be ignored by the autograd.
-# When you call backward, you will get the gradient wrt to the Parameter that was used in the forward.
-
-#         (https://discuss.pytorch.org/t/autograd-doesnt-retain-the-computation-graph-on-a-meta-learning-algorithm/77843/3)
-#         Yes,
-#         But the tricky bit is that nn.Parameter() are built to be parameters that you learn. So they cannot have history. 
-#         So you will have to delete these and replace them with the new updated values as Tensors (and keep them in a 
-#         different place so that you can still update them with your optimizer).
-#         That is why I recommended the library above that does all that for you.
-
-
-#         (https://discuss.pytorch.org/t/cannot-calculate-second-order-gradients-even-though-create-graph-true/78711)
-#         I think the problem in your code is:
-
-#         for p in m.parameters():
-#             p = p - LR * p.grad
-        
-#     You can check the 'higher' package to do this properly (they solve this problem of nn.Parameter for you). 
-#     Otherwise, if you want to do it manually, you can find some info in this thread: How does one have 
-#     the parameters of a model NOT BE LEAFS? (https://discuss.pytorch.org/t/how-does-one-have-the-parameters-of-a-model-not-be-leafs/70076/9)
-
-
-        # https://discuss.pytorch.org/t/layer-weight-vs-weight-data/24271
-
-        # https://discuss.pytorch.org/t/what-is-the-difference-between-register-buffer-and-register-parameter-of-nn-module/32723
-
-        # https://stackoverflow.com/questions/60311609/how-does-one-implement-a-meta-trainable-step-size-in-pytorch
-
-        """
-        Potential solution:
-
-        https://github.com/cnguyen10/few_shot_meta_learning/blob/632e42c8cefb1b98222c8ae7e8e0086e0e524221/maml.py#L417
-
-        https://github.com/AntreasAntoniou/HowToTrainYourMAMLPytorch/blob/master/meta_neural_network_architectures.py#L208
-
-        """
-
-        # https://github.com/tristandeleu/pytorch-meta/tree/master/examples
-
-        # https://github.com/MichaelMMeskhi/MtL-Progress-github.io
-
-        # https://github.com/byu-dml/metalearn
-
-        # https://github.com/tristandeleu/pytorch-maml
-
-        # https://github.com/amzn/metalearn-leap/blob/master/src/maml/maml/maml.py
-
-        # https://github.com/dragen1860/awesome-meta-learning
-
-        # https://github.com/AntreasAntoniou/HowToTrainYourMAMLPytorch/blob/master/few_shot_learning_system.py#L43
-
-        # https://github.com/learnables/learn2learn/blob/6d113f84386f13afc548ba2cd99a2a0e02935a23/learn2learn/utils.py#L205
-
-        # https://discuss.pytorch.org/t/assign-variable-to-model-parameter/6150
-        
-        # https://github.com/szagoruyko/diracnets/blob/master/diracconv.py#L15-L41
-
-        # https://discuss.pytorch.org/t/is-setattr-something-we-need-when-creating-custom-nn-with-changing-layers/14555
-
-        # https://github.com/facebookresearch/higher
-
-        # https://www.google.com/search?rlz=1C1SQJL_enIN887IN887&sxsrf=ALeKk001fTiJK5RuTOo16m8ORb5mGuv1RA%3A1595526448872&ei=MM0ZX9CbMLy-3LUPrpuMuA4&q=setattr+parameter+update+pytorch+&oq=setattr+parameter+update+pytorch+&gs_lcp=CgZwc3ktYWIQAzoECAAQRzoGCAAQDRAeOgYIABAWEB46CAgAEAgQDRAeUOUsWJFlYOhnaAFwAXgAgAHSAYgB2BuSAQYwLjE3LjKYAQCgAQGqAQdnd3Mtd2l6wAEB&sclient=psy-ab&ved=0ahUKEwjQ89aZ9-PqAhU8H7cAHa4NA-cQ4dUDCAw&uact=5
-
-        # https://github.com/szagoruyko/functional-zoo/blob/master/resnet-18-export.ipynb
-
-
         # Line 8 - 10 2nd forward pass and getting the gradients with respect to epsilon
         y_g_hat = meta_net(x_val)
         # l_g_meta = torch.mean(cce_loss(y_g_hat, y_val))
@@ -172,10 +104,6 @@ def meta_ren_train(train_loader, X_val, y_val, model):
 
         sample_wts[list(map(int, (idx.to('cpu')).tolist()))] = np.asarray((ex_wts.to('cpu')).tolist())
 
-        # print("\n norm_const: {}\n".format(norm_const))
-        # print("\n ex_wts: {}\n".format(ex_wts))
-        # print("\n====================\n")
-        # input("Press <ENTER> to continue.\n")
 
         # Lines 12 - 14 computing for the loss with the computed weights
         # and then perform a parameter update
@@ -219,10 +147,6 @@ def test(data_loader, model, run, use_best=False):
                                 mode, dataset, loss_name, noise_type, str(int(noise_rate * 10)), str(run))))
                 model = model.to(device)
 
-            """
-            Loss Function expects the labels to be 
-            integers and not floats
-            """
             y = y.type(torch.LongTensor)
         
             x, y = x.to(device), y.to(device)
@@ -604,32 +528,3 @@ for run in range(num_runs):
     # Print the elapsed time
     elapsed = time.time() - t_start
     print("\nelapsed time: \n", elapsed)
-
-    """
-    Plot results
-    """
-
-
-"""
-You can compute the F-score yourself in pytorch. The F1-score is defined for single-class (true/false) 
-classification only. The only thing you need is to aggregate the number of:
-      Count of the class in the ground truth target data;
-      Count of the class in the predictions;
-      Count how many times the class was correctly predicted.
-
-Let's assume you want to compute F1 score for the class with index 0 in your softmax. In every batch, you can do:
-
-predicted_classes = torch.argmax(y_pred, dim=1) == 0
-target_classes = self.get_vector(y_batch)
-target_true += torch.sum(target_classes == 0).float()
-predicted_true += torch.sum(predicted_classes).float()
-correct_true += torch.sum(
-    predicted_classes == target_classes * predicted_classes == 0).float()
-
-When all batches are processed:
-
-recall = correct_true / target_true
-precision = correct_true / predicted_true
-f1_score = 2 * precision * recall / (precision + recall)
-
-"""
