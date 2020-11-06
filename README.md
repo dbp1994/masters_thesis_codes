@@ -2,7 +2,7 @@
 
 
 ## Things to be done:
-- [x] Create file for the conda environment details
+- [X] Create file for the conda environment details
 - [ ] Upload all the baseline codes
 - [ ] Upload codes for my algorithms
 - [ ] Upload codes pertaining to experiments on memorization and overparameterization
