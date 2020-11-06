@@ -3,8 +3,8 @@
 
 ## Things to be done:
 - [x] Create file for the conda environment details
-- [ ] Upload final versions of the baseline codes
-- [ ] Upload final versions of my algorithms
+- [ ] Upload all the baseline codes
+- [ ] Upload codes for my algorithms
 - [ ] Upload codes pertaining to experiments on memorization and overparameterization
 - [ ] Upload modular versions of all baseline algorithms
 
