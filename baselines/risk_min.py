@@ -3,11 +3,15 @@ from __future__ import print_function, absolute_import
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-import copy
 import time
+import random
 import math
 import pickle
 from tqdm import tqdm
+from collections import OrderedDict
+import copy
+import argparse
+
 from numpy.random import RandomState
 
 import torch
@@ -15,13 +19,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim import lr_scheduler
+from torch.autograd import Variable
+import torchvision
 from torch.utils.tensorboard import SummaryWriter
+from torchvision.models.resnet import ResNet, BasicBlock
 
 from data import *
 from adversarial_attacks import *
 from losses import *
-
-import numpy_indexed as npi
 
 # set seed for reproducibility
 torch.manual_seed(1337)
@@ -40,7 +45,7 @@ def accuracy(true_label, pred_label):
 	acc = 1 - (sum(err)/num_samples)
 	return acc
 
-def rm_train(dataset_train, train_loader, loss_fn, model):
+def rm_train(train_loader, model):
 
     loss_train = 0.
     acc_train = 0.
@@ -48,48 +53,39 @@ def rm_train(dataset_train, train_loader, loss_fn, model):
 
     model.train()
 
+    loss_train_agg = np.zeros((len(train_loader.dataset), ))
+    acc_train_agg = np.zeros((len(train_loader.dataset), ))
+
     for batch_id, (x, y, idx) in tqdm(enumerate(train_loader)):
 
 
-        """
-        PyTorch tensors (by default) are interpreted 
-        as torch.FloatTensors, but the input should be integers (or Long) instead. 
-        Hence one needs to use '.type(torch.LongTensor)'.
-        """
         y = y.type(torch.LongTensor)
-        
-        # Transfer data to the GPU
         x, y, idx = x.to(device), y.to(device), idx.to(device)
-
-        # x = x.reshape((-1, 784))
 
         output = model(x)
         pred_prob = F.softmax(output, dim=1)
         pred = torch.argmax(pred_prob, dim=1)
-
-        # batch_loss = nn.CrossEntropyLoss(reduction='mean')
-        # loss_batch = batch_loss(output, y)
-
         loss_batch = loss_fn(output, y)
 
         optimizer.zero_grad()
         loss_batch.mean().backward()
         optimizer.step()
 
-        # loss_train += (torch.mean(batch_loss(output, y.to(device)))).item() # .item() for scalars, .tolist() in general
-
-        # loss_train += torch.mean(loss_fn(output, y.to(device))).item()
         loss_train += torch.mean(loss_batch).item()
         correct += (pred.eq(y.to(device))).sum().item()
 
         batch_cnt = batch_id + 1
 
+        loss_train_agg[list(map(int, idx.tolist()))] = np.asarray(loss_batch.tolist())
+        acc_train_agg[list(map(int, idx.tolist()))] = np.asarray(pred.eq(y.to(device)).tolist())
+
     loss_train /= batch_cnt
     acc_train = 100.*correct/len(train_loader.dataset)
 
-    return loss_train, acc_train
+    return loss_train, acc_train, loss_train_agg, acc_train_agg
 
-def test(data_loader, loss_fn, model, use_best=False):
+
+def test(data_loader, model, run, use_best=False):
 
     loss_test = 0.
     correct = 0
@@ -100,28 +96,19 @@ def test(data_loader, loss_fn, model, use_best=False):
         for batch_id, (x, y) in enumerate(data_loader):
             if use_best == True:
                 # load best model weights
-                model.load_state_dict(torch.load(chkpt_path + "%s-%s-%s-%s-nr-0%s-mdl-wts.pt"
-                            % (mode, dataset, noise_type, loss_name, str(int(noise_rate * 10)))))
+                model.load_state_dict(torch.load("%s-%s-%s-%s-nr-0%s-mdl-wts-run-%s.pt" % (mode, dataset, 
+                                            loss_name, noise_type, str(int(noise_rate * 10)), str(run))))
                 model = model.to(device)
 
-            """
-            Loss Function expects the labels to be 
-            integers and not floats
-            """
             y = y.type(torch.LongTensor)
         
             x, y = x.to(device), y.to(device)
-
-            # x = x.reshape((-1, 784))
 
             output = model(x)
             pred_prob = F.softmax(output, dim=1)
             pred = torch.argmax(pred_prob, dim=1)
 
-            # batch_loss = nn.CrossEntropyLoss(reduction='mean')
-            # loss_test += batch_loss(output, y).item() # .item() for scalars, .tolist() in general
-            loss_batch = loss_fn(output, y)
-            loss_test += torch.mean(loss_batch).item()
+            loss_test += torch.mean(loss_fn(output, y)).item()
             correct += (pred.eq(y.to(device))).sum().item()
 
             batch_cnt = batch_id + 1
@@ -133,14 +120,26 @@ def test(data_loader, loss_fn, model, use_best=False):
 
 
 # Model
-class MNIST_NN(nn.Module):
+class MNIST_ResNet18(ResNet):
     def __init__(self):
-        super(MNIST_NN, self).__init__()
+        super(MNIST_ResNet18, self).__init__(BasicBlock, [2,2,2,2], num_classes=10)
+
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)
+
+
+# Model
+class MNIST_CNN(nn.Module):
+    def __init__(self):
+        super(MNIST_CNN, self).__init__()
 
         # 1 I/P channel, 6 O/P channels, 5x5 conv. kernel
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=6, kernel_size=5, padding=2)
         self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=5)
         self.conv3 = nn.Conv2d(in_channels=16, out_channels=120, kernel_size=5)
+
+        self.bn1 = nn.BatchNorm2d(6)
+        self.bn2 = nn.BatchNorm2d(16)
+        self.bn3 = nn.BatchNorm2d(120)
 
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
         self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
@@ -154,8 +153,11 @@ class MNIST_NN(nn.Module):
         # x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2), stride=2)
         # x = F.max_pool2d(F.relu(self.conv2(x)), (2, 2), stride=2)
         x = self.pool1(F.relu(self.conv1(x)))
+        x = self.bn1(x)
         x = self.pool2(F.relu(self.conv2(x)))
+        x = self.bn2(x)
         x = F.relu(self.conv3(x))
+        x = self.bn3(x)
         x = x.view(-1, self.num_flat_features(x))
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
@@ -169,9 +171,9 @@ class MNIST_NN(nn.Module):
             num_features *= s
         return num_features
 
-class CIFAR10_NN(nn.Module):
+class CIFAR10_CNN(nn.Module):
     def __init__(self):
-        super(CIFAR10_NN, self).__init__()
+        super(CIFAR10_CNN, self).__init__()
 
         # 1 I/P channel, 6 O/P channels, 5x5 conv. kernel
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=6, kernel_size=3)
@@ -213,317 +215,339 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 Configuration
 """
 
-loss_name = "cce" # "cce" # "gce" "rll" "dmi" "mae"
-num_epoch = 200
+num_epoch = 50
 batch_size = 128
-# num_batches = int(X_train.shape[0] / batch_size)
-learning_rate = 2e-4 #3e-4
-
-noise_rate = 0.6
-noise_type = "sym" #"cc"
 random_state = 422
+num_runs = 1 # 5
+# learning_rate = 2e-4
+learning_rate = 0.25
 
-dataset = "mnist" #"cifar10"
+dataset = "mnist" # "checker_board" # "board" # "cifar10" # "cifar100"
 num_class = 10
-
-"""
-Choose from: ['rm', 'active_bias, 'batch_rewgt', 
-    'meta_ren', 'bilevel_rewgt', 'meta_mlnt', 'meta_net',
-    'selfie', 'pencil']
-"""
 mode = "rm"
 
-"""
-Initialize n/w and optimizer
-"""
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-if dataset == "mnist":
-    model = MNIST_NN()
-elif dataset == "cifar10":
-    model = CIFAR10_NN()
-# params = list(model.parameters())
-model = model.to(device)
-print(model)
+parser = argparse.ArgumentParser(description='Empirical Risk Minimization')
+parser.add_argument('-nr','--noise_rate', default=0.4, type=float, help='noise_rate')
+parser.add_argument('-nt','--noise_type', default="sym", type=str, help='noise_type')
+parser.add_argument('-loss','--loss_name', default="cce", type=str, help='loss_name')
+args = parser.parse_args()
 
-"""
-Loss Function
-"""
-if mode == "rm":
-    if loss_name == "gce":
-        q = 0.7
-        loss_fn = GCE_loss(q=q, reduction="none")
-    elif loss_name == "dmi":
-        loss_fn = L_DMI()
-        model.load_state_dict(torch.load(chkpt_path + "%s-%s-%s-cce-nr-0%s-mdl-wts.pt"
-                            % (mode, dataset, noise_type, str(int(noise_rate * 10)))))
-    elif loss_name == "rll":
-        alpha = 0.45 # works well with lr = 3e-3
-        loss_fn = RLL(alpha=alpha, reduction="none")
-    elif loss_name == "mae":
-        loss_fn = MAE(reduction="none")
+
+noise_rate = args.noise_rate # 0.6
+noise_type = args.noise_type # "sym"
+loss_name = args.loss_name
+
+
+for run in range(num_runs):
+
+    print("\n==================\n")
+    print(f"== RUN No.: {run} ==")
+    print("\n==================\n")
+
+
+    chkpt_path = "./checkpoint/" + mode + "/" + dataset + "/" + noise_type + "/0" + str(int(noise_rate*10)) + "/run_" + str(run) + "/"
+
+    res_path = "./results_pkl/" + mode + "/" + dataset + "/" + noise_type + "/0" + str(int(noise_rate*10)) + "/run_" + str(run) + "/"
+
+    plt_path = "./plots/" + mode + "/" + dataset + "/" + noise_type + "/0" + str(int(noise_rate*10)) + "/run_" + str(run) + "/"
+
+    log_dirs_path = "./runs/" + mode + "/" + dataset + "/" + noise_type + "/0" + str(int(noise_rate*10)) + "/run_" + str(run) + "/"
+
+    if not os.path.exists(chkpt_path):
+        os.makedirs(chkpt_path)
+
+    if not os.path.exists(res_path):
+        os.makedirs(res_path)
+
+    if not os.path.exists(plt_path):
+        os.makedirs(plt_path)
+
+    if not os.path.exists(log_dirs_path):
+        os.makedirs(log_dirs_path)
+
+    
+    print("\n============ PATHS =================\n")
+    print("chkpt_path: {}".format(chkpt_path))
+    print("res_path: {}".format(res_path))
+    print("plt_path: {}".format(plt_path))
+    print("log_dirs_path: {}".format(log_dirs_path))
+    print("\n=============================\n")
+
+    """
+    Read DATA
+    """
+
+    if dataset in ["board", "checker_board", "mnist", "cifar10", "cifar100"]:
+        dat, ids = read_data(noise_type, noise_rate, dataset, mode=mode)
+
+        X_temp, y_temp = dat[0], dat[1]
+        X_train, y_train = dat[2], dat[3]
+        X_val, y_val = dat[4], dat[5]
+        X_test, y_test = dat[6], dat[7]
+
+        if noise_rate > 0.:
+            idx, idx_train, idx_val = ids[0], ids[1], ids[2]
+            idx_tr_clean_ref, idx_tr_noisy_ref = ids[3], ids[4]
+            idx_train_clean, idx_train_noisy = ids[5], ids[6]
+        
+        else:
+            idx, idx_train, idx_val = ids[0], ids[1], ids[2]
+            idx_train_clean, idx_train_noisy = ids[3], ids[4]
+
+        if int(np.min(y_temp)) == 0:
+            num_class = int(np.max(y_temp) + 1)
+        else:
+            num_class = int(np.max(y_temp))
     else:
+        raise SystemExit("Dataset not supported.\n")
+
+
+    print("\n=============================\n")
+    print("X_train: ", X_train.shape, " y_train: ", y_train.shape, "\n")
+    print("X_val: ", X_val.shape, " y_val: ", y_val.shape, "\n")
+    print("X_test: ", X_test.shape, " y_test: ", y_test.shape, "\n")
+    print("y_train - min : {}, y_val - min : {}, y_test - min : {}".format(np.min(y_train), np.min(y_val), np.min(y_test)))
+    print("y_train - max : {}, y_val - max : {}, y_test - max : {}".format(np.max(y_train), np.max(y_val), np.max(y_test)))
+    print("\n=============================\n")
+    print("\n Noise Type: {}, Noise Rate: {} \n".format(noise_type, noise_rate))
+
+    """
+    Create Dataset Loader
+    """
+
+    tensor_x_train = torch.Tensor(X_train) # .as_tensor() avoids copying, .Tensor() creates a new copy
+    tensor_y_train = torch.Tensor(y_train) # .as_tensor() avoids copying, .Tensor() creates a new copy
+    tensor_id_train = torch.from_numpy(np.asarray(list(range(X_train.shape[0]))))
+
+    dataset_train = torch.utils.data.TensorDataset(tensor_x_train, tensor_y_train, tensor_id_train)
+    train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, shuffle=True)
+
+    tensor_x_val = torch.Tensor(X_val)
+    tensor_y_val = torch.Tensor(y_val)
+
+    val_size = y_val.shape[0]
+    dataset_val = torch.utils.data.TensorDataset(tensor_x_val, tensor_y_val)
+    val_loader = torch.utils.data.DataLoader(dataset_val, batch_size=val_size, shuffle=True)
+
+    tensor_x_test = torch.Tensor(X_test)
+    tensor_y_test = torch.Tensor(y_test)
+
+    test_size = 1000
+    dataset_test = torch.utils.data.TensorDataset(tensor_x_test, tensor_y_test)
+    test_loader = torch.utils.data.DataLoader(dataset_test, batch_size=test_size, shuffle=True)
+
+
+
+    """
+    Choose MODEL and LOSS FUNCTION
+    """
+    
+    if dataset == "mnist":
+        # model = MNIST_CNN()
+        model = MNIST_ResNet18()
+    elif dataset in ["cifar10", "cifar100"]:
+        model = torchvision.models.resnet18()
+
+    model = model.to(device)
+    print(model)
+
+    print("\n===========\nloss: {}\n===========\n".format(loss_name))
+
+    if loss_name == "cce":
         loss_fn = nn.CrossEntropyLoss(reduction="none")
-elif mode == "pencil":
-    loss_name = "pencil"
-    # loss_fn = pencil(alpha=alpha, beta=beta)
-    pass
-elif mode == "batch_rewgt":
-    if loss_name == "gce":
-        # loss_fn = weighted_GCE(q=q, reduction="none")
-        pass
+    elif loss_name == "cce_new":
+        loss_fn = CCE_new_APL(num_class=num_class, reduction="none")
+    elif loss_name == "gce":
+        q = 0.7
+        loss_fn = GCE(q=q, num_class=num_class, reduction="none")
+    elif loss_name == "dmi":
+        loss_fn = L_DMI(num_class=num_class)
+        
+        model.load_state_dict(torch.load(chkpt_path + "%s-%s-cce-%s-nr-0%s-mdl-wts-run-%s.pt"
+                                % (mode, dataset, noise_type, str(int(noise_rate * 10)), str(run))))
+    elif loss_name == "rll":
+        alpha = 0.45 # 0.45/0.5/0.6 - works well with lr = 3e-3
+        loss_fn = RLL(alpha=alpha, num_class=num_class, reduction="none")
+    elif loss_name == "mae":
+        loss_fn = MAE(num_class=num_class, reduction="none")
+    elif loss_name == "mse":
+        loss_fn = MSE(num_class=num_class, reduction="none")
+    elif loss_name == "norm_mse":
+        loss_fn = MSE_APL(num_class=num_class, reduction="none")
     else:
-        # loss_name = "cce"
-        # loss_fn = weighted_CCE(reduction="none")
-        pass
-else:
-    loss_fn = nn.CrossEntropyLoss(reduction="none")
-
-print("\n===========\nloss: {}\n===========\n".format(loss_name))
+        raise SystemExit("Invalid loss function\n")
 
 
-chkpt_path = "./checkpoint/" + mode + "/" + dataset + "/" + noise_type + "/0" + str(int(noise_rate*10)) + "/"
+    # optimizer = optim.Adam(model.params(), learning_rate)
+    optimizer = optim.SGD(model.params(), lr = learning_rate, momentum=0.9, weight_decay=1e-4)
 
-res_path = "./results_pkl/" + mode + "/" + dataset + "/" + noise_type + "/0" + str(int(noise_rate*10)) + "/"
-
-plt_path = "./plots/" + mode + "/" + dataset + "/" + noise_type + "/0" + str(int(noise_rate*10)) + "/"
-
-log_dirs_path = "./runs/" + mode + "/" + dataset + "/" + noise_type + "/0" + str(int(noise_rate*10)) + "/"
-
-if not os.path.exists(chkpt_path):
-    os.makedirs(chkpt_path)
-
-if not os.path.exists(res_path):
-    os.makedirs(res_path)
-
-if not os.path.exists(plt_path):
-    os.makedirs(plt_path)
-
-if not os.path.exists(log_dirs_path):
-    os.makedirs(log_dirs_path)
-
-
-"""
-Training/Validation/Test Data
-"""
-
-dat, ids = read_data(noise_type, noise_rate, dataset, mode)
-
-X_temp, y_temp, X_train, y_train = dat[0], dat[1], dat[2], dat[3]
-X_val, y_val, X_test, y_test = dat[4], dat[5], dat[6], dat[7]
-idx, idx_train, idx_val = ids[0], ids[1], ids[2]
-
-
-print("\n=============================\n")
-print("X_train: ", X_train.shape, " y_train: ", y_train.shape, "\n")
-print("X_val: ", X_val.shape, " y_val: ", y_val.shape, "\n")
-print("X_test: ", X_test.shape, " y_test: ", y_test.shape, "\n")    
-print("\n=============================\n")
-
-print("\n Noise Type: {}, Noise Rate: {} \n".format(noise_type, noise_rate))
-
-
-# for i in range(num_class):
-#     print("train - class %d : " %(i), (y_train[y_train==i]).shape, "\n")
-#     print("val - class %d : " %(i), (y_val[y_val==i]).shape, "\n")
-#     print("test - class %d : " %(i), (y_test[y_test==i]).shape, "\n")
-# input("Press <ENTER> to continue...\n")
-
-
-"""
-Create Dataset Loader
-"""
-
-# Train. set
-tensor_x_train = torch.Tensor(X_train) # .as_tensor() avoids copying, .Tensor() creates a new copy
-tensor_y_train = torch.Tensor(y_train) # .as_tensor() avoids copying, .Tensor() creates a new copy
-tensor_id_train = torch.Tensor(idx_train) # .as_tensor() avoids copying, .Tensor() creates a new copy
-
-dataset_train = torch.utils.data.TensorDataset(tensor_x_train, tensor_y_train, tensor_id_train)
-train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, shuffle=True)
-
-# Val. set
-tensor_x_val = torch.Tensor(X_val)
-tensor_y_val = torch.Tensor(y_val)
-# tensor_id_val = torch.Tensor(idx_val)
-
-val_size = 1000
-dataset_val = torch.utils.data.TensorDataset(tensor_x_val, tensor_y_val) #, tensor_id_val)
-val_loader = torch.utils.data.DataLoader(dataset_val, batch_size=val_size, shuffle=True)
-
-# Test set
-tensor_x_test = torch.Tensor(X_test)
-tensor_y_test = torch.Tensor(y_test)
-
-test_size = 1000
-dataset_test = torch.utils.data.TensorDataset(tensor_x_test, tensor_y_test)
-test_loader = torch.utils.data.DataLoader(dataset_test, batch_size=test_size, shuffle=True)
-
-
-
-"""
-Setting up Tensorbard
-"""
-writer = SummaryWriter(log_dirs_path)
-writer.add_graph(model, (tensor_x_train[0].unsqueeze(1)).to(device))
-writer.close()
-
-
-#Optimizer and LR Scheduler
-"""
-Multiple LR Schedulers: https://github.com/pytorch/pytorch/pull/26423
-"""
-optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-lr_scheduler_1 = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+    lr_scheduler_1 = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                 factor=0.1, patience=5, verbose=True, threshold=0.0001,
                 threshold_mode='rel', cooldown=0, min_lr=1e-5, eps=1e-08)
-lr_scheduler_2 = lr_scheduler.MultiStepLR(optimizer, milestones=[30,80], gamma=0.1)
-## optimizer = optim.RMSprop(model.parameters(), lr=0.0001)
-lr_scheduler_3 = lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+    lr_scheduler_2 = lr_scheduler.MultiStepLR(optimizer, milestones=[30,80], gamma=0.1)
+    # lr_scheduler_2 = lr_scheduler.MultiStepLR(optimizer, milestones=[100,150], gamma=0.1)
+    lr_scheduler_3 = lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
-
-epoch_loss_train = []
-epoch_acc_train = []
-epoch_loss_test = []
-epoch_acc_test = []
-
-best_acc_val = 0.
-
-for epoch in range(1, num_epoch+1):
-
-    #Training set performance
-    loss_train, acc_train = rm_train(dataset_train, train_loader, loss_fn, model)
-    writer.add_scalar('training_loss', loss_train, epoch)
-    writer.add_scalar('training_accuracy', acc_train, epoch)
-    writer.close()
-    # Validation set performance
-    loss_val, acc_val = test(val_loader, loss_fn, model, use_best=False)
-    #Testing set performance
-    loss_test, acc_test = test(test_loader, loss_fn, model, use_best=False)
-    writer.add_scalar('testing_loss', loss_test, epoch)
-    writer.add_scalar('testing_accuracy', acc_test, epoch)
+    """
+    Setting up Tensorbard
+    """
+    writer = SummaryWriter(log_dirs_path)
+    writer.add_graph(model, (torch.transpose(tensor_x_train[0].unsqueeze(1),0,1)).to(device))
     writer.close()
 
-    # Learning Rate Scheduler Update
-    # lr_scheduler_1.step(loss_val)
-    ##lr_scheduler_3.step()
-    ##lr_scheduler_2.step()
+    best_acc_val = 0.
 
-    epoch_loss_train.append(loss_train)
-    epoch_acc_train.append(acc_train)    
+    epoch_loss_train = []
+    epoch_acc_train = []
+    epoch_loss_test = []
+    epoch_acc_test = []
 
-    epoch_loss_test.append(loss_test)
-    epoch_acc_test.append(acc_test)
+    epoch_loss_train_agg = np.zeros((len(train_loader.dataset), num_epoch))
+    epoch_acc_train_agg = np.zeros((len(train_loader.dataset), num_epoch))
 
-    # Update best_acc_val
-    if epoch == 1:
-        best_acc_val = acc_val
+    t_start = time.time()
+
+    for epoch in range(num_epoch):
+
+        #Training set performance
+        loss_train, acc_train, loss_train_agg, acc_train_agg = rm_train(train_loader, model)
+        writer.add_scalar('training_loss', loss_train, epoch)
+        writer.add_scalar('training_accuracy', acc_train, epoch)
+        writer.close()
+
+        # Validation set performance
+        loss_val, acc_val = test(val_loader, loss_fn, model, use_best=False)
+        
+        #Testing set performance
+        loss_test, acc_test = test(test_loader, loss_fn, model, use_best=False)
+        writer.add_scalar('testing_loss', loss_test, epoch)
+        writer.add_scalar('testing_accuracy', acc_test, epoch)
+        writer.close()
+
+        # Learning Rate Scheduler Update
+        # lr_scheduler_1.step(loss_val)
+        ##lr_scheduler_3.step()
+        ##lr_scheduler_2.step()
+
+        epoch_loss_train.append(loss_train)
+        epoch_acc_train.append(acc_train)
+        epoch_loss_train_agg[:, epoch] = loss_train_agg
+        epoch_acc_train_agg[:, epoch] = acc_train_agg    
+
+        epoch_loss_test.append(loss_test)
+        epoch_acc_test.append(acc_test)
+
+        # Update best_acc_val
+        if epoch == 1:
+            best_acc_val = acc_val
 
 
-    if acc_val > best_acc_val:
-        best_acc_val = acc_val
-        best_model_wts = copy.deepcopy(model.state_dict())
-        torch.save(model.state_dict(), chkpt_path + "%s-%s-%s-%s-nr-0%s-mdl-wts.pt" % (
-                            mode, dataset, loss_name, noise_type, str(int(noise_rate * 10))))
-        print("Model weights updated...\n")
+        if acc_val > best_acc_val:
+            best_acc_val = acc_val
+            best_model_wts = copy.deepcopy(model.state_dict())
+            torch.save(model.state_dict(), chkpt_path + "%s-%s-%s-%s-nr-0%s-mdl-wts-run-%s.pt" % (mode, dataset, 
+                                loss_name, noise_type, str(int(noise_rate * 10)), str(run)))
+            print("Model weights updated...\n")
 
-    print("Epoch: {}, lr: {}, loss_train: {}, loss_val: {}, loss_test: {:.3f}, acc_train: {}, acc_val: {}, acc_test: {:.3f}\n".format(epoch, 
-                                                optimizer.param_groups[0]['lr'], 
-                                                loss_train, loss_val, loss_test, 
-                                                acc_train, acc_val, acc_test))
+        print("Epoch: {}, lr: {}, loss_train: {}, loss_val: {}, loss_test: {:.3f}, acc_train: {}, acc_val: {}, acc_test: {:.3f}\n".format(epoch, 
+                                                    optimizer.param_groups[0]['lr'], 
+                                                    loss_train, loss_val, loss_test, 
+                                                    acc_train, acc_val, acc_test))
 
 
-# Test accuracy on the best_val MODEL
-loss_test, acc_test = test(test_loader, loss_fn, model, use_best=False)
-print("Test set performance - test_acc: {}, test_loss: {}\n".format(acc_test, loss_test))
+    # Test accuracy on the best_val MODEL
+    loss_test, acc_test = test(test_loader, model, run, use_best=False)
 
-# Print the elapsed time
-elapsed = time.time() - t_start
-print("\nelapsed time: \n", elapsed)
+    print(f"Run: {run}::: Test set performance \
+            - test_acc: {acc_test}, test_loss: \
+            {loss_test}\n")
 
-"""
-Save results
-"""
-with open(res_path+ "%s-%s-%s-%s-nr-0%s.pickle" % (mode, dataset, loss_name, noise_type, 
-            str(int(noise_rate * 10))), 'wb') as f:
-    pickle.dump({'epoch_loss_train': np.asarray(epoch_loss_train), 
-                'epoch_acc_train': np.asarray(epoch_acc_train), 
-                'epoch_loss_test': np.asarray(epoch_loss_test), 
-                'epoch_acc_test': np.asarray(epoch_acc_test), 
-                'idx': np.asarray(idx), 'X_temp': X_temp,
-                'X_train': X_train, 'X_val': X_val,
-                'y_temp': y_temp, 'y_train':y_train, 'y_val':y_val,
-                'idx_train': np.asarray(idx_train),
-                'idx_val': np.asarray(idx_val), 
-                'num_epoch': num_epoch}, f, protocol=pickle.HIGHEST_PROTOCOL)
-    print("Pickle file saved: " + res_path+ "%s-%s-%s-%s-nr-0%s.pickle" % (mode, dataset, loss_name, 
-                noise_type, str(int(noise_rate * 10))), "\n")
+    if noise_rate > 0.:
+        torch.save(model.state_dict(), chkpt_path + 
+                    "%s-%s-%s-%s-nr-0%s-mdl-wts-run-%s.pt" % (
+                    mode, dataset, loss_name, noise_type, 
+                    str(int(noise_rate * 10)), str(run)))
 
-"""
-Plot results
-"""
-# fig = plt.figure(1)
+    # model.load_state_dict(torch.load(chkpt_path + "%s-%s-%s-%s-nr-0%s-mdl-wts-run-%s.pt"
+    #                     % (mode, dataset, loss_name, noise_type, str(int(noise_rate * 10)), str(run))))
+    # model = model.to(device)
+
+    """
+    Adversarial Attacks
+    """
+    # if dataset=="mnist":
+    #     epsilon = 0.1
+    #     k = 40
+    #     # alpha = 2.5 * epsilon / k
     
-# plt.plot(np.arange(len(loss_clean)), loss_clean)
-# plt.plot(np.arange(len(loss_noisy)), loss_noisy)
-# plt.plot(np.arange(len(avg_epoch_train_loss)), avg_epoch_train_loss)
-# plt.plot(np.arange(len(epoch_test_loss)), epoch_test_loss)
-# plt.title("%s - loss plot (%s noise, n = %s, %s)" %(loss_fn, noise_type, str(noise), dataset))
-# plt.legend(['avg_loss_clean', 'avg_loss_noisy', 'avg_epoch_train_loss', 'epoch_test_loss'], loc = 'best')
-# fig.savefig("%s_%s_loss_plot_%s_nr_%s.png" % (dataset, loss_fn, noise_type,str(noise)), format="png", dpi=600)
+    # adv_acc_fgsm = test_fgsm_batch_ce(model, test_loader, epsilon)
+    # adv_acc_pgd = test_pgd_batch_ce(model, test_loader, epsilon, k=k)
 
-# fig2 = plt.figure(2)
+    # print("Checking performance for FGSM & PGD Adversarial attacks...\n")
+    # print(f"Run {run} ::: FGSM Attack: acc. = {adv_acc_fgsm}, PGD Attack: acc. = {adv_acc_pgd}\n")
 
-# plt.plot(np.arange(len(acc_clean)), acc_clean)
-# plt.plot(np.arange(len(acc_noisy)), acc_noisy)
-# plt.plot(np.arange(len(avg_epoch_train_acc)), avg_epoch_train_acc)
-# plt.plot(np.arange(len(epoch_test_acc)), epoch_test_acc)
-# plt.title("%s - accuracy  plot (%s noise, n = %s, %s)" %(loss_fn, noise_type, str(noise), dataset))
-# plt.legend(['avg_acc_train_clean', 'avg_acc_train_noisy', 'avg_acc_train', 'acc_test'], loc = 'best')
-# fig2.savefig("%s_%s_acc_plot_%s_nr_%s.png" % (dataset, loss_fn, noise_type, str(noise)), format="png", dpi=600)
+    """
+    Save results
+    """
+    with open(res_path+ "%s-%s-%s-%s-nr-0%s-run-%s.pickle" % (mode, dataset, loss_name, noise_type, 
+                    str(int(noise_rate * 10)), str(run)), 'wb') as f:
+            if noise_rate > 0.:
+                pickle.dump({'epoch_loss_train': np.asarray(epoch_loss_train), 
+                            'epoch_acc_train': np.asarray(epoch_acc_train),
+                            'epoch_loss_test': np.asarray(epoch_loss_test), 
+                            'epoch_acc_test': np.asarray(epoch_acc_test), 
+                            'epoch_loss_train_agg': epoch_loss_train_agg,
+                            'epoch_acc_train_agg': epoch_acc_train_agg,
+                            'idx_train': idx_train, 'idx_tr_clean_ref': idx_tr_clean_ref, 
+                            'idx_tr_noisy_ref': idx_tr_noisy_ref,
+                            'X_temp': X_temp,  'X_train': X_train, 
+                            'X_val': X_val, 'y_temp': y_temp, 
+                            'y_train':y_train, 'y_val':y_val,
+                            'num_epoch': num_epoch}, f, protocol=pickle.HIGHEST_PROTOCOL)
+                # pickle.dump({'epoch_loss_train': np.asarray(epoch_loss_train), 
+                #             'epoch_acc_train': np.asarray(epoch_acc_train),
+                #             'epoch_loss_test': np.asarray(epoch_loss_test), 
+                #             'epoch_acc_test': np.asarray(epoch_acc_test), 
+                #             'epoch_loss_train_agg': epoch_loss_train_agg,
+                #             'epoch_acc_train_agg': epoch_acc_train_agg,
+                #             'idx_train': idx_train, 'idx_tr_clean_ref': idx_tr_clean_ref, 
+                #             'idx_tr_noisy_ref': idx_tr_noisy_ref,
+                #             'X_temp': X_temp,  'X_train': X_train, 
+                #             'X_val': X_val, 'y_temp': y_temp, 
+                #             'y_train':y_train, 'y_val':y_val,
+                #             'num_epoch': num_epoch, 'adv_acc_fgsm': adv_acc_fgsm, 
+                #             'adv_acc_pgd': adv_acc_pgd}, f, protocol=pickle.HIGHEST_PROTOCOL)
+            else:
+                pickle.dump({'epoch_loss_train': np.asarray(epoch_loss_train), 
+                            'epoch_acc_train': np.asarray(epoch_acc_train),
+                            'epoch_loss_test': np.asarray(epoch_loss_test), 
+                            'epoch_acc_test': np.asarray(epoch_acc_test), 
+                            'epoch_loss_train_agg': epoch_loss_train_agg,
+                            'epoch_acc_train_agg': epoch_acc_train_agg,
+                            'X_temp': X_temp, 'X_train': X_train, 'X_val': X_val,
+                            'y_temp': y_temp, 'y_train':y_train, 'y_val':y_val,
+                            'num_epoch': num_epoch}, f, protocol=pickle.HIGHEST_PROTOCOL)
+                # pickle.dump({'epoch_loss_train': np.asarray(epoch_loss_train), 
+                #             'epoch_acc_train': np.asarray(epoch_acc_train),
+                #             'epoch_loss_test': np.asarray(epoch_loss_test), 
+                #             'epoch_acc_test': np.asarray(epoch_acc_test), 
+                #             'epoch_loss_train_agg': epoch_loss_train_agg,
+                #             'epoch_acc_train_agg': epoch_acc_train_agg,
+                #             'X_temp': X_temp, 'X_train': X_train, 'X_val': X_val,
+                #             'y_temp': y_temp, 'y_train':y_train, 'y_val':y_val,
+                #             'num_epoch': num_epoch, 'adv_acc_fgsm': adv_acc_fgsm, 
+                #             'adv_acc_pgd': adv_acc_pgd}, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    print("Pickle file saved: " + res_path+ "%s-%s-%s-%s-nr-0%s-run-%s.pickle" % (mode, dataset, loss_name, 
+                    noise_type, str(int(noise_rate * 10)), str(run)), "\n")
 
 
-"""
-# correction log
+    # Print the elapsed time
+    elapsed = time.time() - t_start
+    print("\nelapsed time: \n", elapsed)
 
-if method == "selfie":
-    num_corrected_sample = 0
-    num_correct_corrected_sample = 0
-
-    samples = train_batch_patcher.loaded_data
-    for sample in samples:
-        if sample.corrected:
-            num_corrected_sample += 1
-            if sample.true_label == sample.last_corrected_label:
-                num_correct_corrected_sample += 1
-
-    if num_corrected_sample != 0:
-        print("Label correction of ""refurbishable"" samples : ",(epoch + cur_epoch + 1), ": ", num_correct_corrected_sample, "/", num_corrected_sample, "( ", float(num_correct_corrected_sample)/float(num_corrected_sample), ")")
-        if correction_log is not None:
-            correction_log.append(str(epoch + cur_epoch + 1) + ", " + str(num_correct_corrected_sample) + ", " + str(num_corrected_sample) + ", " + str(float(num_correct_corrected_sample)/float(num_corrected_sample)))
-
-"""
-
-
-"""
-You can compute the F-score yourself in pytorch. The F1-score is defined for single-class (true/false) 
-classification only. The only thing you need is to aggregating the number of:
-      Count of the class in the ground truth target data;
-      Count of the class in the predictions;
-      Count how many times the class was correctly predicted.
-
-Let's assume you want to compute F1 score for the class with index 0 in your softmax. In every batch, you can do:
-
-predicted_classes = torch.argmax(y_pred, dim=1) == 0
-target_classes = self.get_vector(y_batch)
-target_true += torch.sum(target_classes == 0).float()
-predicted_true += torch.sum(predicted_classes).float()
-correct_true += torch.sum(
-    predicted_classes == target_classes * predicted_classes == 0).float()
-
-When all batches are processed:
-
-recall = correct_true / target_true
-precision = correct_true / predicted_true
-f1_score = 2 * precission * recall / (precision + recall)
-
-"""
+    """
+    Plot results
+    """
