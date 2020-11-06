@@ -7,7 +7,7 @@
 - [ ] Upload all the baseline codes
 - [ ] Upload codes for my algorithms
 - [ ] Upload codes pertaining to experiments on memorization and overparameterization
-- [ ] Upload modular versions of all baseline algorithms
+- [ ] _Modularize_ your codes
 
 ## Instructions to run experiments:
 - To be upated.
