@@ -2,7 +2,8 @@
 
 
 ## Things to be done:
-- [X] Create file for the conda environment details
+- [X] Create a file for the conda environment details (_conda_env_details.txt_)
+- [ ] Create a file containing hyperparameter details for all the experiments
 - [ ] Upload all the baseline codes
 - [ ] Upload codes for my algorithms
 - [ ] Upload codes pertaining to experiments on memorization and overparameterization
