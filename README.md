@@ -2,8 +2,8 @@
 
 
 ## Things to be done:
-- [X] Create a file for the conda environment details (**_conda_env_details.txt_**) 
-- [ ] Create a file containing hyperparameter details for all the experiments (**_hyperparam_details.md_**)
+- [X] Create a file for the conda environment details [**_conda_env_details.txt_**)]
+- [ ] Create a file containing hyperparameter details for all the experiments [**_hyperparam_details.md_**] [[desired format](https://github.com/HanxunH/Active-Passive-Losses/blob/master/configs/cifar10/sym/gce.yaml)]
 - [ ] Upload all the baseline codes
 - [ ] Upload codes for my algorithms
 - [ ] Upload codes pertaining to experiments on memorization and overparameterization
