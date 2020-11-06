@@ -5,7 +5,7 @@
 - [x] Upload the conda environment .yml file
 - [ ] Upload final versions of the baseline codes
 - [ ] Upload final versions of my algorithms
-- [ ] Upload final versions of the codes pertaining to memorization and overparameterization in Neural Networks
+- [ ] Upload codes pertaining to experiments on memorization and overparameterization
 - [ ] Upload modular versions of all baseline algorithms
 
 ## Relevant Links for the baseline algorithms:
