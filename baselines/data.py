@@ -36,18 +36,25 @@ def numpy_to_categorical(y, num_classes=None, dtype='float32'):
     return categorical
 
 
-def read_data(noise_type, noise_rate, dataset, mode="rm"):
+def read_data(noise_type, noise_rate, dataset, data_aug=False, mode="rm"):
 
     if dataset == "mnist":
 
         num_class = 10
-        dat_train = torchvision.datasets.MNIST('./data', train=True, download=True, transform=
-                                transforms.Compose([transforms.ToTensor(), 
-                                transforms.Normalize((0.1307, ), (0.3081, ))]))
+        
+        if not data_aug:
+            dat_train = torchvision.datasets.MNIST('./data', train=True, download=True, transform=
+                                    transforms.Compose([transforms.ToTensor(), 
+                                    transforms.Normalize((0.1307, ), (0.3081, ))]))
 
-        dat_test = torchvision.datasets.MNIST('./data', train=False, download=True, transform=
-                                transforms.Compose([transforms.ToTensor(), 
-                                transforms.Normalize((0.1307, ), (0.3081, ))]))
+            dat_test = torchvision.datasets.MNIST('./data', train=False, download=True, transform=
+                                    transforms.Compose([transforms.ToTensor(), 
+                                    transforms.Normalize((0.1307, ), (0.3081, ))]))
+            
+            print("\nNO DATA AUGMENTATION...\n")
+        
+        else:
+            raise NotImplementedError("Data augmentation not implemented.\n")
         
         X_temp = (dat_train.data).numpy()
         y_temp = (dat_train.targets).numpy()
@@ -58,28 +65,33 @@ def read_data(noise_type, noise_rate, dataset, mode="rm"):
     elif dataset == "cifar10":
         num_class = 10
 
-        dat_train = torchvision.datasets.CIFAR10('./data', train=True, download=True, transform=
-                                transforms.Compose([transforms.ToTensor(),
-                                transforms.Normalize((0.4914, 0.4822, 0.4465), 
-                                (0.2023, 0.1994, 0.2010))]))
+        if not data_aug:
+            dat_train = torchvision.datasets.CIFAR10('./data', train=True, download=True, transform=
+                                    transforms.Compose([transforms.ToTensor(),
+                                    transforms.Normalize((0.4914, 0.4822, 0.4465), 
+                                    (0.2023, 0.1994, 0.2010))]))
 
-        dat_test = torchvision.datasets.CIFAR10('./data', train=False, download=True, transform=
-                                transforms.Compose([transforms.ToTensor(),
-                                transforms.Normalize((0.4914, 0.4822, 0.4465), 
-                                (0.2023, 0.1994, 0.2010))]))
+            dat_test = torchvision.datasets.CIFAR10('./data', train=False, download=True, transform=
+                                    transforms.Compose([transforms.ToTensor(),
+                                    transforms.Normalize((0.4914, 0.4822, 0.4465), 
+                                    (0.2023, 0.1994, 0.2010))]))
 
-        print("\nNO DATA AUGMENTATION...\n")
+            print("\nDATA AUGMENTATION DISABLED...\n")
 
-        # dat_train = torchvision.datasets.CIFAR10('./data', train=True, download=True, transform=
-        #                         transforms.Compose([transforms.RandomCrop(32, padding=4),
-        #                         transforms.RandomHorizontalFlip(), transforms.ToTensor(),
-        #                         transforms.Normalize((0.4914, 0.4822, 0.4465), 
-        #                         (0.2023, 0.1994, 0.2010))]))
+        else:
 
-        # dat_test = torchvision.datasets.CIFAR10('./data', train=False, download=True, transform=
-        #                         transforms.Compose([transforms.ToTensor(),
-        #                         transforms.Normalize((0.4914, 0.4822, 0.4465), 
-        #                         (0.2023, 0.1994, 0.2010))]))
+            dat_train = torchvision.datasets.CIFAR10('./data', train=True, download=True, transform=
+                                    transforms.Compose([transforms.RandomCrop(32, padding=4),
+                                    transforms.RandomHorizontalFlip(), transforms.ToTensor(),
+                                    transforms.Normalize((0.4914, 0.4822, 0.4465), 
+                                    (0.2023, 0.1994, 0.2010))]))
+
+            dat_test = torchvision.datasets.CIFAR10('./data', train=False, download=True, transform=
+                                    transforms.Compose([transforms.ToTensor(),
+                                    transforms.Normalize((0.4914, 0.4822, 0.4465), 
+                                    (0.2023, 0.1994, 0.2010))]))
+
+            print("\nDATA AUGMENTATION ENABLED...\n")
         
         X_temp = dat_train.data
         y_temp = np.asarray(dat_train.targets)
@@ -135,7 +147,7 @@ def read_data(noise_type, noise_rate, dataset, mode="rm"):
     Add Label Noise
     """
 
-    if mode in ["rm", "active_bias", "batch_rewgt", "selfie", "meta_mlnt"]:
+    if mode in ["rm", "active_bias", "batch_rewgt", "selfie", "meta_mlnt", "pencil"]:
 
         if noise_rate > 0.:
             if noise_type=='sym':
@@ -336,15 +348,10 @@ def read_data(noise_type, noise_rate, dataset, mode="rm"):
                     y_val, X_test, y_test, X_hyp_val, y_hyp_val)
         ids = (idx_train, idx_train_ref, idx_train_clean, idx_train_clean_ref, 
             idx_train_noisy, idx_train_noisy_ref, idx_val_clean)
-
-    elif mode == "bilevel_rewgt":
-        pass
-    elif mode == "pencil":
-        pass
     else:
         raise SystemExit("Mode not supported. Choose from: ['rm', \
                          'active_bias, 'batch_rewgt', 'meta_ren', \
-                        'bilevel_rewgt', 'meta_mlnt', 'meta_net', \
+                        'meta_mlnt', 'meta_net', \
                         'selfie', 'pencil']\n")
     
     # y_val = numpy_to_categorical(y_val, num_class)
