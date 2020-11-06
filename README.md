@@ -19,6 +19,7 @@
 - PENCIL (CVPR'19) [[paper](https://openaccess.thecvf.com/content_CVPR_2019/papers/Yi_Probabilistic_End-To-End_Noise_Correction_for_Learning_With_Noisy_Labels_CVPR_2019_paper.pdf)] [[official code](https://github.com/yikun2019/PENCIL)] [[unofficial code](https://github.com/JacobPfau/PENCIL)] [[unofficial code](https://github.com/ljmiao/PENCIL)]
 - Meta MLNT (CVPR'19) [[paper](https://openaccess.thecvf.com/content_CVPR_2019/papers/Li_Learning_to_Learn_From_Noisy_Labeled_Data_CVPR_2019_paper.pdf)] [[official code](https://github.com/LiJunnan1992/MLNT)]
 - Meta Net (NeurIPS'19) [[paper](https://papers.nips.cc/paper/2019/file/e58cc5ca94270acaceed13bc82dfedf7-Paper.pdf)] [[official code](https://github.com/xjtushujun/meta-weight-net)]
+- Normalised Loss Functions (ICML'20) [[paper](https://arxiv.org/abs/2006.13554)] [[official code](https://github.com/HanxunH/Active-Passive-Losses/)]
 - JoCoR (CVPR'20) [[paper](https://arxiv.org/pdf/2003.02752.pdf)] [[official code](https://github.com/hongxin001/JoCoR)]
 - DivideMix (ICLR'20) [[paper](https://openreview.net/forum?id=HJgExaVtwr)] [[official code](https://github.com/LiJunnan1992/DivideMix)]
 
