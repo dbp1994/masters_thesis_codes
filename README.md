@@ -9,6 +9,9 @@
 - [ ] Upload codes pertaining to experiments on memorization and overparameterization
 - [ ] Upload modular versions of all baseline algorithms
 
+## Instructions to run experiments:
+- To be upated.
+
 ## Relevant links for the baseline algorithms:
 - Meta-Ren (ICML'18) [[paper](https://openaccess.thecvf.com/content_CVPR_2019/papers/Yi_Probabilistic_End-To-End_Noise_Correction_for_Learning_With_Noisy_Labels_CVPR_2019_paper.pdf)] [[official code](https://github.com/uber-research/learning-to-reweight-examples)] [[unofficial code](https://github.com/danieltan07/learning-to-reweight-examples)] [[unofficial code](https://github.com/tanyuqian/learning-data-manipulation)]
 - Generalized Cross-Entropy (NeurIPS'18) [[paper](https://arxiv.org/abs/1805.07836)]
