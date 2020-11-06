@@ -2,7 +2,7 @@
 
 
 ## Things to be done:
-- [x] Upload the conda environment .yml file
+- [x] Create file for the conda environment details
 - [ ] Upload final versions of the baseline codes
 - [ ] Upload final versions of my algorithms
 - [ ] Upload codes pertaining to experiments on memorization and overparameterization
