@@ -21,5 +21,6 @@
 - Meta Net (NeurIPS'19) [[paper](https://papers.nips.cc/paper/2019/file/e58cc5ca94270acaceed13bc82dfedf7-Paper.pdf)] [[official code](https://github.com/xjtushujun/meta-weight-net)]
 - Normalised Loss Functions (ICML'20) [[paper](https://arxiv.org/abs/2006.13554)] [[official code](https://github.com/HanxunH/Active-Passive-Losses/)]
 - JoCoR (CVPR'20) [[paper](https://arxiv.org/pdf/2003.02752.pdf)] [[official code](https://github.com/hongxin001/JoCoR)]
+- Meta Loss-Correction[[paper](https://openaccess.thecvf.com/content_CVPR_2020/papers/Wang_Training_Noise-Robust_Deep_Neural_Networks_via_Meta-Learning_CVPR_2020_paper.pdf)]
 - DivideMix (ICLR'20) [[paper](https://openreview.net/forum?id=HJgExaVtwr)] [[official code](https://github.com/LiJunnan1992/DivideMix)]
 
