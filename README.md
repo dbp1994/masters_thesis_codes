@@ -7,7 +7,7 @@
 - [ ] Upload all the baseline codes
 - [ ] Upload codes for my algorithms
 - [ ] Upload codes pertaining to experiments on memorization and overparameterization
-- [ ] _Modularize_ your codes
+- [ ] _Modularize_ your codes (along the lines of [this](https://github.com/hrayrhar/limit-label-memorization/releases/tag/v0.1)/[this](https://github.com/hrayrhar/limit-label-memorization) PyTorch-based repository)
 
 ## Instructions to run experiments:
 - To be upated.
