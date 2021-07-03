@@ -1,5 +1,9 @@
 # Codes for my M.Tech (Research) thesis
 
+## BARE
+> Contains codes corresponding to the paper [_Adaptive Sample Selection for Robust Learning under Label Noise_](https://arxiv.org/abs/2106.15292)
+
+## x
 
 ## Things to be done:
 - [X] Create a file for the conda environment details [**_conda_env_details.txt_**)]
