@@ -1,9 +1,11 @@
 # Codes for my M.Tech (Research) thesis
 
-## BARE
-> Contains codes corresponding to the paper [_Adaptive Sample Selection for Robust Learning under Label Noise_](https://arxiv.org/abs/2106.15292)
+## _BARE_
+> Contains codes corresponding to the paper [_Adaptive Sample Selection for Robust Learning under Label Noise_](https://arxiv.org/abs/2106.15292) which corresponds to [Ch-3 of my master's thesis](https://dbp1994.github.io/files/deep-patel-iisc-masters-thesis_compressed.pdf).
 
-## x
+## memorization_and_overparam
+> Contains codes corresponding to the paper [_Memorization in Deep Neural Networks: Does the Loss Function Matter?_](https://link.springer.com/chapter/10.1007/978-3-030-75765-6_11) which corresponds to [Ch-4 of my master's thesis](https://dbp1994.github.io/files/deep-patel-iisc-masters-thesis_compressed.pdf).
+
 
 ## Things to be done:
 - [X] Create a file for the conda environment details [**_conda_env_details.txt_**)]
