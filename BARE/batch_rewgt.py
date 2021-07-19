@@ -26,7 +26,6 @@ import numpy_indexed as npi
 
 from data import *
 from losses import *
-from adversarial_attacks import *
 
 # set seed for reproducibility
 torch.manual_seed(1337)
@@ -39,7 +38,7 @@ torch.autograd.set_detect_anomaly(True)
 eps = 1e-8
 
 
-parser = argparse.ArgumentParser(description='PyTorch MNIST Batch_Rewgt Training')
+parser = argparse.ArgumentParser(description='PyTorch Batch_Rewgt Training')
 parser.add_argument('-dat', '--dataset', default="mnist",type=str, help="dataset")
 parser.add_argument('-nr', '--noise_rate', default=0.4, type=float, help="noise rate")
 parser.add_argument('-nt', '--noise_type', default="sym", type=str, help="noise type")
@@ -191,65 +190,6 @@ class MNIST_NN(nn.Module):
         return num_features
 
 
-class CIFAR_NN(nn.Module):
-    def __init__(self, temp=1.0):
-        super(CIFAR_NN, self).__init__()
-
-        # 1 I/P channel, 6 O/P channels, 5x5 conv. kernel
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=5, padding=2)
-        self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=5)
-        self.conv3 = nn.Conv2d(in_channels=16, out_channels=120, kernel_size=5)
-
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-
-        self.fc1 = nn.Linear(480, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
-
-        self.temp = temp
-    
-    def forward(self, x):
-
-        # x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2), stride=2)
-        # x = F.max_pool2d(F.relu(self.conv2(x)), (2, 2), stride=2)
-        x = self.pool1(F.relu(self.conv1(x)))
-        x = self.pool2(F.relu(self.conv2(x)))
-        x = F.relu(self.conv3(x))
-        x = x.view(-1, self.num_flat_features(x))
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x)) / self.temp
-        return x
-
-    def num_flat_features(self, x):
-        size = x.size()[1:] # all dims except batch_size dim
-        num_features = 1
-        for s in size:
-            num_features *= s
-        return num_features
-
-class CNN_small(nn.Module):
-    def __init__(self, num_classes=10, temp=1.):
-        super(CNN_small, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, num_classes)
-
-        self.temp = temp
-
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 5 * 5)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x) / self.temp
-        return x
-
 def call_bn(bn, x):
     return bn(x)
 
@@ -341,55 +281,6 @@ class CNN_CIFAR100(nn.Module):
         return logit
 
 
-class Net_dropout(nn.Module):
-
-    """
-    Adam - lr = 1e-3 used by https://www.kaggle.com/uvxy1234/cifar-10-implementation-with-pytorch
-    """
-    def __init__(self, dropout=0.2):
-        super(Net_dropout, self).__init__()
-        
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=5, stride=1, padding=2)
-        #3*32*32 -> 32*32*32
-        self.dropout1 = nn.Dropout(p=dropout)        
-        self.pool1 = nn.MaxPool2d(kernel_size=(2,2), stride=2)
-        #32*32*32 -> 16*16*32
-        self.conv2 = nn.Conv2d(32, 64, 3, stride=1, padding=1)
-        #16*16*32 -> 16*16*64
-        self.dropout2 = nn.Dropout(p=dropout)
-        self.pool2 = nn.MaxPool2d(kernel_size=(2,2), stride=2)
-        #16*16*64 -> 8*8*64
-        self.fc1 = nn.Linear(8*8*64, 1024)
-        self.dropout3 = nn.Dropout(p=dropout)
-        self.fc2 = nn.Linear(1024, 512)
-        self.dropout4 = nn.Dropout(p=dropout)
-        self.fc3 = nn.Linear(512, 10)
-            
-
-    def forward(self, x):
-        x = self.dropout1(self.conv1(x))
-        x = self.pool1(F.relu(x))
-        x = self.dropout2(self.conv2(x))
-        x = self.pool2(F.relu(x))
-        x = x.view(-1, self.num_flat_features(x)) 
-        #self.num_flat_features(x) = 8*8*64 here.
-        #-1 means: get the rest a row (in this case is 16 mini-batches)
-        #pytorch nn only takes mini-batch as the input
-        
-        x = F.relu(self.fc1(x))
-        x = self.dropout3(x)
-        x = F.relu(self.fc2(x))
-        x = self.dropout4(x)
-        x = self.fc3(x)
-        return x
-    
-    def num_flat_features(self, x):
-        size = x.size()[1:] # all dimensions except the batch dimension
-        num_features = 1
-        for s in size:
-            num_features *= s
-        return num_features
-
 class NewsNet(nn.Module):
     def __init__(self, weights_matrix, context_size=1000, hidden_size=300, num_classes=6):
         super(NewsNet, self).__init__()
@@ -448,84 +339,11 @@ class MLPNet(nn.Module):
         x = self.fc2(x)
         return x
 
-# class SVHN_Net(nn.Module):
-#     def __init__(self):
-#         super(SVHN_Net, self).__init__()
-#         self.network = nn.Sequential(
-#             nn.Conv2d(3, 16, kernel_size=3, padding=1),
-#             nn.BatchNorm2d(16),
-#             nn.ReLU(),
-            
-#             nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
-#             nn.BatchNorm2d(32),
-#             nn.ReLU(),
-#             nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
-#             #nn.BatchNorm2d(64),
-#             nn.ReLU(),
-#             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
-#             nn.BatchNorm2d(128),
-#             nn.ReLU(),
-#             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-#             #nn.BatchNorm2d(256),
-#             nn.ReLU(),
-            
-#             nn.Conv2d(256, 16, kernel_size=1, stride=1, padding=0),
-#             nn.MaxPool2d(2, 2), # output: 16 x 14 x 14
-#             nn.Dropout(p=0.25),
-
-#             nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=0),
-#             #nn.BatchNorm2d(32),
-#             nn.ReLU(),
-#             nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=0),
-#             nn.BatchNorm2d(64),
-#             nn.ReLU(),
-#             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=0),
-#             #nn.BatchNorm2d(128),
-#             nn.ReLU(),
-#             nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=0),
-#             nn.BatchNorm2d(256),
-#             nn.ReLU(),
-
-#             nn.Conv2d(256, 10, kernel_size=1, stride=1, padding=1),
-#             #nn.MaxPool2d(2, 2), # output: 10 x 3 x 3
-
-#             nn.AvgPool2d(kernel_size=6),           
-#             nn.Flatten(),
-#             nn.Softmax())
-        
-#     def forward(self, xb):
-#         return self.network(xb)
-
 class SVHN_Net(nn.Module):
     """
     Model adapted from 
     https://github.com/nanekja/JovianML-Project/blob/master/SVHN_Dataset_Classification_v2.ipynb
     """
-
-    # def __init__(self, in_size=3*32*32, out_size=10):
-    #     super().__init__()
-
-    #     self.linear1 = nn.Linear(in_size, 64)
-    #     self.linear2 = nn.Linear(64, 256)
-    #     self.linear3 = nn.Linear(256, 32)
-    #     self.linear4 = nn.Linear(32, out_size)
-
-    #     self.bn1 = nn.BatchNorm1d(64)
-    #     self.bn2 = nn.BatchNorm1d(256)
-    #     self.bn3 = nn.BatchNorm1d(32)
-        
-    # def forward(self, xb):
-    #     # Flatten the image tensors
-    #     out = xb.view(xb.size(0), -1)
-    #     out = self.linear1(out)
-    #     out = self.bn1(F.relu(out)) # out = F.relu(out)
-    #     out = self.linear2(out)
-    #     out = self.bn2(F.relu(out)) # out = F.relu(out)
-    #     out = self.linear3(out)
-    #     out = self.bn3(F.relu(out)) # out = F.relu(out)
-    #     out = F.relu(self.linear4(out))
-    #     return out
-
 
     def __init__(self):
         super(SVHN_Net, self).__init__()
@@ -543,34 +361,28 @@ class SVHN_Net(nn.Module):
             nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(),
-            # nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-            # #nn.BatchNorm2d(256),
-            # nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(256),
+            nn.ReLU(),
             
-            # nn.Conv2d(256, 16, kernel_size=1, stride=1, padding=0),
-            # nn.MaxPool2d(2, 2), # output: 16 x 14 x 14
-            # nn.Dropout(p=0.25),
+            nn.Conv2d(256, 16, kernel_size=1, stride=1, padding=0),
+            nn.MaxPool2d(2, 2), # output: 16 x 14 x 14
+            nn.Dropout(p=0.25),
 
-            # nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=0),
-            # #nn.BatchNorm2d(32),
-            # nn.ReLU(),
-            # nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=0),
-            # nn.BatchNorm2d(64),
-            # nn.ReLU(),
-            # nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=0),
-            # #nn.BatchNorm2d(128),
-            # nn.ReLU(),
-            # nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=0),
-            # nn.BatchNorm2d(256),
-            # nn.ReLU(),
-
-            # nn.Conv2d(256, 10, kernel_size=1, stride=1, padding=1),
-            # #nn.MaxPool2d(2, 2), # output: 10 x 3 x 3
-            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=0),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=0),
+            #nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=0),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=0),
+            #nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=0),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
 
-            nn.Conv2d(128, 10, kernel_size=1, stride=3, padding=1),
+            nn.Conv2d(256, 10, kernel_size=1, stride=1, padding=1),
             #nn.MaxPool2d(2, 2), # output: 10 x 3 x 3
 
             nn.AvgPool2d(kernel_size=6),           
@@ -579,34 +391,6 @@ class SVHN_Net(nn.Module):
         
     def forward(self, xb):
         return self.network(xb)
-
-    # # https://github.com/xingjunm/dimensionality-driven-learning/blob/master/models.py
-    # def __init__(self):
-    #     super(SVHN_Net, self).__init__()
-
-    #     self.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, stride=2, padding=2)
-    #     self.conv2 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=2, padding=2)
-
-    #     self.pool1 = nn.MaxPool2d(kernel_size=2,stride=2)
-    #     self.pool2 = nn.MaxPool2d(kernel_size=2,stride=2)
-
-    #     self.bn1 = nn.BatchNorm2d(64)
-    #     self.bn2 = nn.BatchNorm2d(64)
-
-    #     self.fc1 = nn.Linear(300, 512)
-    #     self.fc2 = nn.Linear(512, 128)
-    #     self.fc3 = nn.Linear(128, 10)
-    
-    # def forward(self, x):
-    #     x = F.relu(self.bn1(self.conv1(x)))
-    #     x = self.pool1(x)
-    #     x = F.relu(self.bn2(self.conv1(x)))
-    #     x = self.pool2(x)
-    #     x = x.view(-1, 1)
-    #     x = F.relu(self.fc1(x))
-    #     x = F.relu(self.fc2(x))
-    #     x = self.fc3(x)
-    #     return x
 
 
 
@@ -631,8 +415,6 @@ batch_size = args.batch_size
 loss_name = args.loss_name
 num_epoch = args.num_epoch
 num_runs = args.num_runs
-
-# batch_size = 128
 
 if dataset == "news":
     batch_size = 64
@@ -676,9 +458,6 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 for run in range(num_runs):
 
     t_start = time.time()
-
-    # if dataset == "cifar10" and run == 0 and noise_type == "sym":
-    #     continue
 
     epoch_loss_train = []
     epoch_acc_train = []
@@ -786,37 +565,12 @@ for run in range(num_runs):
     """
 
     if dataset == "mnist":
-        model = MNIST_NN()
-        # model = MLPNet()
+        model = MLPNet()
     elif dataset in ["cifar10", "cifar100"]:
-
         if dataset == "cifar10":
-            # model = CIFAR_NN()
-            # model = CNN_small()
             model = CNN()
-            # model = Net_dropout()
-            # learning_rate = 1e-3
         else:
             model = CNN_CIFAR100()
-
-        # Adjust learning rate and betas for Adam Optimizer
-        mom1 = 0.9
-        mom2 = 0.1
-        alpha_plan = [learning_rate] * num_epoch
-        beta1_plan = [mom1] * num_epoch
-        for i in range(10, num_epoch):
-            alpha_plan[i] = float(num_epoch - i) / (num_epoch - 10) * learning_rate
-            beta1_plan[i] = mom2
-
-        def adjust_learning_rate(optimizer, epoch):
-            for param_group in optimizer.param_groups:
-                param_group['lr']=alpha_plan[epoch]
-                param_group['betas']=(beta1_plan[epoch], 0.999)
-    
-    elif dataset == "imagenet_tiny":
-        model = PreActResNet18(num_classes=200)
-        learning_rate = 1e-3
-
     elif dataset == "news":
         model = NewsNet(weights_matrix)
         learning_rate = 2e-4
@@ -867,14 +621,6 @@ for run in range(num_runs):
         writer.add_scalar('testing_accuracy', acc_test, epoch)
         writer.close()
 
-        # Learning Rate Scheduler Update
-        # if dataset == "mnist":
-        #     # lr_scheduler_1.step(loss_val)
-        #     ##lr_scheduler_3.step()
-        #     lr_scheduler_2.step()
-        # elif dataset in ["cifar10","cifar100"]:
-        #     adjust_learning_rate(optimizer, epoch)
-
         if dataset in ["mnist", "svhn"]:
             lr_scheduler_1.step(loss_val)
         elif dataset in ["cifar10", "cifar100"]:
@@ -922,7 +668,6 @@ for run in range(num_runs):
     """
     Save results
     """
-
 
     with open(res_path+ "%s-%s-%s-%s-nr-0%s-run-%s.pickle" % (mode, dataset, loss_name, noise_type, 
                 str(int(noise_rate * 10)), str(run)), 'wb') as f:
