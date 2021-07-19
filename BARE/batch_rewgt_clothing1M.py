@@ -24,7 +24,7 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy_indexed as npi
 
 from data_clothing1M import *
-from losses_clothing1M import *
+from losses import *
 
 # set seed for reproducibility
 torch.manual_seed(123)
