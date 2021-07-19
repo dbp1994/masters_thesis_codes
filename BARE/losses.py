@@ -110,21 +110,7 @@ class MSE_APL(nn.Module):
         prediction = F.softmax(prediction, dim=1)
         y_pred = torch.clamp(prediction, eps, 1-eps).to(device)
 
-        # norm_const = torch.sum(F.mse_loss(y_pred.repeat_interleave(self.num_class, dim=0), 
-        #             (torch.eye(self.num_class)).repeat(y_pred.shape[0], 1).to(device), 
-        #             reduction="none"), dim=1)
-        # # print("\n", norm_const.shape,"\n")
-        # norm_const = torch.reshape(norm_const, (self.num_class, -1))
-        # # print("\n", norm_const.shape,"\n")
-        # norm_const = torch.sum(norm_const, dim=0)
-        # # print("\n", norm_const.shape,"\n")
-
-        # if torch.min(norm_const) < 1e-8:
-        #     raise SystemExit("Denominator too small.\n")
-
         norm_const = (self.num_class*((torch.norm(y_pred, None, dim=1))**2)) + self.num_class - 2
-
-        # norm_const = torch.clamp(norm_const, min=1e-8)
 
         l1 = (1./norm_const) * torch.sum(F.mse_loss(y_pred, y_true, reduction="none"), dim=1)
         ## l2 = -1. * torch.sum(y_pred * torch.log(torch.clamp(y_true, eps, 1.0)), dim=1)
@@ -239,17 +225,6 @@ class weighted_CCE(nn.Module):
         # prun_idx will tell us which examples are 
         # 'trustworthy' for the given batch
         prun_idx = torch.where(pred_prun != 0.)[0]
-
-        # print("pred_prun", pred_prun)
-        # print("pred_prun", pred_prun.shape)
-        # print("prun_idx", prun_idx)
-        # print("prun_idx", prun_idx.shape)
-
-        # input("<ENTER>\n")
-
-        # loss_fn = nn.CrossEntropyLoss(reduction=self.reduction)
-        # weighted_loss=loss_fn(torch.index_select(y_true, dim=0, prun_idx), 
-        #                 torch.index_select(y_pred, dim=0, prun_idx))
 
         if len(prun_idx) != 0:
             prun_targets = torch.argmax(torch.index_select(y_true, 0, prun_idx), dim=1)
@@ -511,19 +486,6 @@ class weighted_GCE(nn.Module):
         # prun_idx will tell us which examples are 
         # 'trustworthy' for the given batch
         prun_idx = torch.where(pred_prun != 0.)[0]
-
-        # print("pred_prun", pred_prun)
-        # print("pred_prun", pred_prun.shape)
-        # print("prun_idx", prun_idx)
-        # print("prun_idx", prun_idx.shape)
-
-        # input("<ENTER>\n")
-
-        # loss_fn = nn.CrossEntropyLoss(reduction=self.reduction)
-        # weighted_loss=loss_fn(torch.index_select(y_true, dim=0, prun_idx), 
-        #                 torch.index_select(y_pred, dim=0, prun_idx))
-
-        # prun_targets = torch.argmax(torch.index_select(y_true, 0, prun_idx), dim=1)
 
         if len(prun_idx) != 0:
             weighted_loss = (1 - torch.pow(torch.sum(torch.index_select(y_true, 0, 
