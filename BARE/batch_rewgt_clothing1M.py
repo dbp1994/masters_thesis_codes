@@ -25,7 +25,6 @@ import numpy_indexed as npi
 
 from data_clothing1M import *
 from losses_clothing1M import *
-from adversarial_attacks import *
 
 # set seed for reproducibility
 torch.manual_seed(123)
@@ -152,7 +151,6 @@ if loss_name == "gce":
     q = 0.7
     loss_fn = weighted_GCE(q=q, k=1, num_class=num_class, reduction="none")
 elif loss_name == "cce":
-    # loss_name = "cce"
     loss_fn = weighted_CCE(k=1, num_class=num_class, reduction="none")
 else:
     raise NotImplementedError(f"Batch Reweighting not implemented for - {loss_name}")
@@ -211,23 +209,6 @@ for run in range(num_runs):
 
 
     """
-    Training/Validation/Test Data
-    """
-
-    # # dat, ids = read_data(noise_type, noise_rate, dataset, data_aug, mode)
-
-    # # X_temp, y_temp, X_train, y_train = dat[0], dat[1], dat[2], dat[3]
-    # # X_val, y_val, X_test, y_test = dat[4], dat[5], dat[6], dat[7]
-    # # idx, idx_train, idx_val = ids[0], ids[1], ids[2]
-
-
-    # print("\n=============================\n")
-    # print("X_train: ", X_train.shape, " y_train: ", y_train.shape, "\n")
-    # print("X_val: ", X_val.shape, " y_val: ", y_val.shape, "\n")
-    # print("X_test: ", X_test.shape, " y_test: ", y_test.shape, "\n")    
-    # print("\n=============================\n")
-
-    """
     Create Dataset Loader
     """
 
@@ -257,7 +238,7 @@ for run in range(num_runs):
 
 
     """
-    Use this optimizer and data config. for Clothing-1M, Animal-10N, Food-101N
+    Use (??) this optimizer and data config. for Clothing-1M, Animal-10N, Food-101N
     https://openreview.net/pdf?id=ZPa2SyGcbwh
     """
 
