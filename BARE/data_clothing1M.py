@@ -7,7 +7,7 @@ import json
 import torch
 
 """
-Code taken from 
+Code adapted from 
 
 Meta MLNT: https://github.com/LiJunnan1992/MLNT/blob/40f163d42b05c990b499a6d1a5539150986ab370/dataloader.py
 """
