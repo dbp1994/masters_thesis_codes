@@ -89,22 +89,11 @@ def read_data(noise_type, noise_rate, dataset, data_aug=False, mode="risk_min"):
         num_class = 10
         
         if not data_aug:
-            if mode == "loss_sent":
-                dat_train = torchvision.datasets.MNIST('./data', train=True, download=True, transform=
-                                    transforms.Compose([transforms.ToTensor(), 
-                                    transforms.Resize((14, 14)),
-                                    transforms.Normalize((0.1307, ), (0.3081, ))]))
-
-                dat_test = torchvision.datasets.MNIST('./data', train=False, download=True, transform=
-                                        transforms.Compose([transforms.ToTensor(), 
-                                        transforms.Resize((14, 14)),
-                                        transforms.Normalize((0.1307, ), (0.3081, ))]))
-            else:
-                dat_train = torchvision.datasets.MNIST('./data', train=True, download=True, transform=
+            dat_train = torchvision.datasets.MNIST('./data', train=True, download=True, transform=
                                         transforms.Compose([transforms.ToTensor(), 
                                         transforms.Normalize((0.1307, ), (0.3081, ))]))
 
-                dat_test = torchvision.datasets.MNIST('./data', train=False, download=True, transform=
+            dat_test = torchvision.datasets.MNIST('./data', train=False, download=True, transform=
                                         transforms.Compose([transforms.ToTensor(), 
                                         transforms.Normalize((0.1307, ), (0.3081, ))]))
             
@@ -113,21 +102,12 @@ def read_data(noise_type, noise_rate, dataset, data_aug=False, mode="risk_min"):
         else:
             raise NotImplementedError("Data augmentation not implemented.\n")
         
-        if mode == "loss_sent":
-            X_t = (dat_train.data).numpy()
-            y_t = (dat_train.targets).numpy()
 
-            X_temp, _, y_temp, _ = model_selection.train_test_split(
-                            X_t, y_t, test_size=0.974, random_state=42)
+        X_temp = (dat_train.data).numpy()
+        y_temp = (dat_train.targets).numpy()
 
-            X_test = (dat_test.data).numpy()
-            y_test = (dat_test.targets).numpy()
-        else:        
-            X_temp = (dat_train.data).numpy()
-            y_temp = (dat_train.targets).numpy()
-
-            X_test = (dat_test.data).numpy()
-            y_test = (dat_test.targets).numpy()
+        X_test = (dat_test.data).numpy()
+        y_test = (dat_test.targets).numpy()
         
         feat_size = 28 * 28
 
@@ -244,25 +224,13 @@ def read_data(noise_type, noise_rate, dataset, data_aug=False, mode="risk_min"):
     #     ]))
 
 
-    elif dataset in ["board", "checker_board"]:
-            dat = np.loadtxt(f"./{dataset}/{dataset}_data.txt", delimiter=",")
-            X, y = dat[:,:-1], dat[:,-1]
-
-            if int(np.min(y)) == 0:
-                num_class = int(np.max(y) + 1)
-            else:
-                num_class = int(np.max(y))
-            
-            X_temp, X_test, y_temp, y_test = model_selection.train_test_split(X, y, 
-                                test_size=0.2, random_state=42)
-
-            feat_size = 28 * 28
     
-        # elif dataset == "imdb":
-        #     dat_train = torchtext.datasets.IMDB('./data/', train=True, download=True)
+    
+    # elif dataset == "imdb":
+    #     dat_train = torchtext.datasets.IMDB('./data/', train=True, download=True)
 
-        # elif dataset == "agnews":
-        #     dat_train, dat_test = torchtext.datasets.AG_News(root='./data/', ngram=3, vocab=False)
+    # elif dataset == "agnews":
+    #     dat_train, dat_test = torchtext.datasets.AG_News(root='./data/', ngram=3, vocab=False)
 
     elif dataset == "news":
 
@@ -525,30 +493,14 @@ def read_data(noise_type, noise_rate, dataset, data_aug=False, mode="risk_min"):
 
         y_temp1 = np.concatenate((y_train, y_val))
 
-        for i in range(100):
-            print("class: ",i," -- ", sum(y_train == i*1.).item(),"\n")
-        
-        input("Press <ENTER> to continue.\n")
-
         if noise_rate > 0.:
             if noise_type=='sym':
                 y_temp_noisy, P = noisify_with_P(y_temp1, num_class, noise_rate, random_state=42)
-            elif noise_type == 'cc' and mode in ["batch_rewgt_sent", "batch_rewgt_sent_2", "coteaching_sent", "coteaching_plus_sent", "curr_loss_sent"]:
-                print(f"\nSENSITIVITY TEST ---- here - {mode}\n")
-                if dataset in ["mnist", "svhn"]: 
-                    y_temp_noisy, P = noisify_mnist_asymmetric_sent(y_temp1, noise_rate, random_state=42)
-                elif dataset == "cifar10":
-                    y_temp_noisy, P = noisify_cifar10_asymmetric_sent(y_temp1, noise_rate, random_state=42)
-            elif noise_type == 'cc' and mode not in ["batch_rewgt_sent", "batch_rewgt_sent_2", "coteaching_sent", "coteaching_plus_sent", "curr_loss_sent"]:
+            elif noise_type == 'cc':
                 if dataset in ["mnist", "svhn"]:
                     y_temp_noisy, P = noisify_mnist_asymmetric(y_temp1, noise_rate, random_state=42)
                 elif dataset == "cifar10":
                     y_temp_noisy, P = noisify_cifar10_asymmetric(y_temp1, noise_rate, random_state=42)
-                    # y_temp_n, _ = noisify_cifar10_asymmetric(y_temp, noise_rate, random_state=42)
-                    # y_temp_noisy, P = noisify_with_P(y_temp_n, num_class, 0.9, random_state=42)
-                    # actual_noise = (y_temp_noisy != y_temp).mean()
-                    # assert actual_noise > 0.0
-                    # print('Actual noise %.2f' % actual_noise)
                 elif dataset == "cifar100":
                     y_train_noisy, _ = noisify_pairflip(y_train, noise_rate, random_state=42, nb_classes=num_class)
                 elif dataset == "news":
@@ -568,35 +520,6 @@ def read_data(noise_type, noise_rate, dataset, data_aug=False, mode="risk_min"):
         y_train_noisy = y_temp_noisy[:-y_val_shape]
         y_val = y_temp_noisy[-y_val_shape:]
         
-        # if not mode == "loss_reg_pat":
-        #     X_train, X_val, y_train_noisy, y_val = model_selection.train_test_split(
-        #                         X_temp, y_temp_noisy, test_size=0.2, random_state=42)
-        # else:
-        #     X_t1, _, y_t1, _ = model_selection.train_test_split(
-        #                     X_temp, y_temp_noisy, test_size=0.96, random_state=42)
-        #     X_train, X_val, y_train_noisy, y_val = model_selection.train_test_split(
-        #                     X_t1, y_t1, test_size=0.5, random_state=42)
-
-
-        ##y_train_orig = y_temp.copy()
-
-        # y_train = numpy_to_categorical(y_train, num_class)
-        ## The following works only for torch.Tensors
-        ## y_train = torch.nn.functional.one_hot(torch.Tensor(y_train), num_class)
-
-    # else:
-    #     raise SystemExit("Mode not supported. Choose from: ['risk_min', \
-    #                      'active_bias, 'batch_rewgt', 'meta_ren', \
-    #                     'meta_mlnt', 'meta_net', 'selfie', 'pencil', \
-    #                     'coteaching', 'coteaching_plus']\n")
-    
-    # y_val = numpy_to_categorical(y_val, num_class)
-    # y_test = numpy_to_categorical(y_test, num_class)
-
-    ## The following works only for torch.Tensors
-    ## y_val = torch.nn.functional.one_hot(torch.Tensor(y_val), num_class)
-    ## y_test = torch.nn.functional.one_hot(torch.Tensor(y_test), num_class)
-
     """
     Since the data has been shuffled during 'sklearn.model_selection',
     we wil keep track of the indices so as to infer clean and 
