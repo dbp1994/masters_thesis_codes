@@ -11,9 +11,9 @@
 - [X] Create a file for the conda environment details [**_conda_env_details.txt_**)]
 - [ ] Create a file containing hyperparameter details for all the experiments [**_hyperparam_details.md_**] [[desired format](https://github.com/HanxunH/Active-Passive-Losses/blob/master/configs/cifar10/sym/gce.yaml)]
 - [ ] Upload all the baseline codes
-- [ ] Upload codes for my algorithms
-- [ ] Upload codes pertaining to experiments on memorization and overparameterization
-- [ ] _Modularize_ your codes (along the lines of [this](https://github.com/hrayrhar/limit-label-memorization/releases/tag/v0.1)/[this](https://github.com/hrayrhar/limit-label-memorization) PyTorch-based repository)
+- [X] Upload codes for my algorithms
+- [X] Upload codes pertaining to experiments on memorization and overparameterization
+- [] _Modularize_ your codes (along the lines of [this](https://github.com/hrayrhar/limit-label-memorization/releases/tag/v0.1)/[this](https://github.com/hrayrhar/limit-label-memorization) PyTorch-based repository)
 
 ## Instructions to run experiments:
 - To be upated.
