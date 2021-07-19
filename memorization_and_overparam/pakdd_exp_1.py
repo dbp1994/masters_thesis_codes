@@ -25,7 +25,6 @@ from pakdd_models import *
 from resnet import resnet32
 
 from data import *
-from adversarial_attacks import *
 from losses import get_loss
 
 
@@ -45,40 +44,6 @@ class MNIST_ResNet18(ResNet):
         super(MNIST_ResNet18, self).__init__(BasicBlock, [2,2,2,2], num_classes=10)
 
         self.conv1 = nn.Conv2d(1, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)
-
-class MNIST_CNN_2(nn.Module):
-    def __init__(self):
-        super(MNIST_CNN_2, self).__init__()
-
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=64, kernel_size=3)
-        self.conv2 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3)
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3)
-        self.conv4 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3)
-        self.conv5 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3)
-
-        self.pool1 = nn.MaxPool2d(kernel_size=2)
-        self.pool2 = nn.MaxPool2d(kernel_size=2)
-        self.pool3 = nn.MaxPool2d(kernel_size=2)
-
-        self.bn1 = nn.BatchNorm2d(64)
-        self.bn2 = nn.BatchNorm2d(128)
-        self.bn3 = nn.BatchNorm2d(256)
-            
-        self.lin1 = nn.Linear(200, 512)
-        self.lin2 = nn.Linear(512, 10)
-    
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = self.pool1(F.relu(self.conv2(x)))
-        x = self.bn1(x)
-        x = F.relu(self.conv3(x))
-        x = self.pool2(F.relu(self.conv4(x)))
-        x = self.bn2(x)
-        x = self.bn3(self.pool3(F.relu(self.conv5(x))))
-        x = x.view(x.shape[0], -1)
-        x = F.relu(self.lin1(x))
-        x = self.lin2(x)
-
 
 class MNIST_CNN(nn.Module):
     def __init__(self):
@@ -368,16 +333,7 @@ if __name__ == "__main__":
         """
         Choose MODEL and LOSS FUNCTION
         """
-        if arch == "mlp1x":
-            model = CIFAR_MLP_1x(X_train.shape[1], num_class)
-            learning_rate = 1e-2
-        elif arch == "mlp3x":
-            model = CIFAR_MLP_3x(X_train.shape[1], num_class)
-            learning_rate = 1e-2
-        elif arch == "cnn":
-            model = CIFAR_CNN(num_class, batch_norm=batch_norm)
-            learning_rate = 1e-3
-        elif arch == "resnet":
+        if arch == "resnet":
             # model = CIFAR_ResNet34(num_class)
             # model = CIFAR_ResNet32(num_class)
             model = resnet32()
@@ -385,43 +341,6 @@ if __name__ == "__main__":
         elif arch == "inception_small":
             model = CIFAR_Inception_Small(num_classes=num_class, batch_norm=batch_norm)
             learning_rate = 1e-1
-            # model = torchvision.models.googlenet(pretrained=False, num_classes=num_class, aux_logits=False)
-        elif arch == "mobilenet":
-            model = CIFAR_MobileNet()
-            learning_rate = 1e-2
-        elif arch == "cnn-13":
-            model = CIFAR_13_CNN()
-            weight_decay = 5e-4
-            num_epoch = 300
-            learning_rate = 2e-2
-        elif arch == "alexnet":
-            model = CIFAR_AlexCNN_Small(num_classes=num_class, batch_norm=batch_norm)
-            learning_rate = 1e-2
-            # model = torchvision.models.alexnet(pretrained=False, num_classes=num_class)
-        elif arch == "inception_v3":
-            model = torchvision.models.inception_v3(pretrained=False, num_classes=num_class, aux_logits=False)
-            learning_rate = 1e-1
-        
-        
-        
-        # model = MNIST_CNN()
-        # learning_rate = 2e-4
-        # model = MNIST_CNN_2()
-        # learning_rate = 1e-3 - ADAM
-        #    # datagen = ImageDataGenerator(
-        #    # featurewise_center=False,  # set input mean to 0 over the dataset
-        #    # samplewise_center=False,  # set each sample mean to 0
-        #    # featurewise_std_normalization=False,  # divide inputs by std of the dataset
-        #    # samplewise_std_normalization=False,  # divide each input by its std
-        #    # zca_whitening=False,  # apply ZCA whitening
-        #    # rotation_range=10,  # randomly rotate images in the range (degrees, 0 to 180)
-        #    # zoom_range = 0.1, # Randomly zoom image 
-        #    # width_shift_range=0.1,  # randomly shift images horizontally (fraction of total width)
-        #    # height_shift_range=0.1,  # randomly shift images vertically (fraction of total height)
-        #    # horizontal_flip=False,  # randomly flip images
-        #    # vertical_flip=False)  # randomly flip images
-        # model = MNIST_ResNet18()
-        # learning_rate = 1e-3
 
         model = model.to(device)
         print(model)
@@ -445,24 +364,15 @@ if __name__ == "__main__":
                                         mode, batch_norm, str(weight_decay), data_aug, arch, dataset, 
                                         noise_type, str(int(noise_rate * 10)), str(run)))['model_state_dict'])
 
-        if arch == "mobilenet":
-            optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-2, betas=(0.9,0.999), eps=1e-8, weight_decay=weight_decay, amsgrad=False)
-            lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=2, verbose=True, min_lr=1e-5)
-        else:
-            optimizer = optim.SGD(model.parameters(), lr = learning_rate, momentum=0.9, weight_decay=weight_decay)
+        optimizer = optim.SGD(model.parameters(), lr = learning_rate, momentum=0.9, weight_decay=weight_decay)
         # optimizer = optim.Adam(model.parameters(), lr = learning_rate)
 
-        # lr_lambda = lambda epoch: 0.95**epoch - for Inception_small & MLP1x, MLP3x
-        # lr_lambda = lambda epoch: (0.1**(epoch>=82)) * (0.1**(epoch>=123)) - for ResNet-34 and 164 epochs
 
-        if arch == "resnet":
-            lr_lambda = lambda epoch: (0.1**(epoch>=100)) * (0.1**(epoch>=150))
-            lr_scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-            # lr_scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-            #     factor=0.1, patience=5, verbose=True, threshold=0.0001,
-            #     threshold_mode='rel', cooldown=0, min_lr=1e-5, eps=1e-08)
-        elif arch == "alexnet":
-            lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.5)
+        lr_lambda = lambda epoch: (0.1**(epoch>=100)) * (0.1**(epoch>=150))
+        lr_scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+        # lr_scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+        #     factor=0.1, patience=5, verbose=True, threshold=0.0001,
+        #     threshold_mode='rel', cooldown=0, min_lr=1e-5, eps=1e-08)
 
 
         """
@@ -506,14 +416,7 @@ if __name__ == "__main__":
             writer.add_scalar('testing_accuracy', acc_test, epoch)
             writer.close()
 
-            # Learning Rate Scheduler Update
-            # if epoch >= 1 and not arch == "cnn":
-            #     lr_scheduler.step()
-            # lr_scheduler.step(loss_val)
-            if arch == "mobilenet":
-                lr_scheduler.step(acc_val)
-            else:
-                lr_scheduler.step()
+            lr_scheduler.step()
 
             epoch_loss_train.append(loss_train)
             epoch_acc_train.append(acc_train)
@@ -567,12 +470,6 @@ if __name__ == "__main__":
                         str(int(noise_rate * 10)), 
                         str(run)))
 
-        # model.load_state_dict(torch.load(chkpt_path + "%s-bn-%s-wd-%s-aug-%s-%s-%s-%s-%s-nr-0%s-run-%s.pt" % (
-        #            mode, batch_norm, str(weight_decay), data_aug, arch, dataset, 
-        #            loss_name, noise_type, 
-        #            str(int(noise_rate * 10)), 
-        #           str(run)))['model_state_dict'])
-        # model = model.to(device)
 
         """
         Save results
@@ -617,33 +514,3 @@ if __name__ == "__main__":
         # Print the elapsed time
         elapsed = time.time() - t_start
         print("\nelapsed time: \n", elapsed)
-
-        log_txt_name = "%s-%s-log.txt" % (mode, dataset)
-        file_name = "%s-bn-%s-wd-%s-aug-%s-%s-%s-%s-%s-nr-0%s-run-%s.[pickle/pt]" % (
-                    mode, batch_norm, str(weight_decay), data_aug, arch, dataset, 
-                    loss_name, noise_type, str(int(noise_rate * 10)), str(run))
-
-        with open(log_txt_name, 'a') as f:
-            f.write("\n===================================================\n")
-            f.write(f"file_name: {file_name}\n")
-            f.write(f"Date & Time: {str(datetime.datetime.now())}\n")
-            f.write(f"Dataset: {dataset}\n")
-            f.write(f"noise_rate: {noise_rate}\n")
-            f.write(f"noise_type: {noise_type}\n")
-            f.write(f"loss: {loss_name}\n")
-            f.write(f"mode: {mode}\n")
-            f.write(f"arch: {arch}\n")
-            f.write(f"batch_norm: {batch_norm}\n")
-            f.write(f"weight_decay: {weight_decay}\n")
-            f.write(f"data_aug: {data_aug}\n")
-            f.write(f"num_epoch: {num_epoch}\n")
-            f.write(f"batch_size: {batch_size}\n")
-            f.write(f"run: {run}\n")
-            f.write(f"loss_train: {loss_train}\n")
-            f.write(f"acc_train: {acc_train}\n")
-            f.write(f"acc_val: {acc_val}\n")
-            f.write(f"best_acc_val: {best_acc_val}\n")
-            f.write(f"loss_test: {loss_test}\n")
-            f.write(f"acc_test: {acc_test}\n")
-            f.write(f"elapsed_time: {elapsed}")
-            f.write("\n===================================================\n")
