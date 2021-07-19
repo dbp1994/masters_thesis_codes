@@ -21,7 +21,7 @@ import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.models.resnet import ResNet, BasicBlock
-from pakdd_models import *
+from pakdd_models import CIFAR_Inception_Small
 from resnet import resnet32
 
 from data import *
