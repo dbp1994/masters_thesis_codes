@@ -20,8 +20,6 @@ import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.utils.tensorboard import SummaryWriter
 
-from preact_resnet import PreActResNet18
-
 import numpy_indexed as npi
 
 from data import *
