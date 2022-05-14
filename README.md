@@ -1,5 +1,9 @@
 # Codes for my M.Tech (Research) thesis
 
+## Note
+> The implementations are hard-coded. I will be uploading a clean version of my thesis codes soon. Thanks! And, meanwhile, if you have any question, please reach out to me here or on Twitter (@dbp_patel_1994).
+
+
 ## _BARE_
 > Contains codes corresponding to the paper [_Adaptive Sample Selection for Robust Learning under Label Noise_](https://arxiv.org/abs/2106.15292) which corresponds to [Ch-3 of my master's thesis](https://dbp1994.github.io/files/deep-patel-iisc-masters-thesis_compressed.pdf).
 
