@@ -5,7 +5,7 @@
 
 
 ## _BARE_
-> Contains codes corresponding to the paper [_Adaptive Sample Selection for Robust Learning under Label Noise_](https://arxiv.org/abs/2106.15292) which corresponds to [Ch-3 of my master's thesis](https://dbp1994.github.io/files/deep-patel-iisc-masters-thesis_compressed.pdf).
+> Contains codes corresponding to the paper [_Adaptive Sample Selection for Robust Learning under Label Noise_](https://arxiv.org/abs/2106.15292) which corresponds to [Ch-3 of my master's thesis](https://dbp1994.github.io/files/deep-patel-iisc-masters-thesis_compressed.pdf). This work has been accepted at [WACV 2023](https://wacv2023.thecvf.com/home).
 
 ## memorization_and_overparam
 > Contains codes corresponding to the paper [_Memorization in Deep Neural Networks: Does the Loss Function Matter?_](https://link.springer.com/chapter/10.1007/978-3-030-75765-6_11) which corresponds to [Ch-4 of my master's thesis](https://dbp1994.github.io/files/deep-patel-iisc-masters-thesis_compressed.pdf).
