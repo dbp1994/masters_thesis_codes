@@ -1,7 +1,9 @@
 # Codes for my M.Tech (Research) thesis
 
 ## Update (December 2022)
-> All the codes have been shifted to [HERE])(https://github.com/dbp1994/bare-wacv-2023) for ```BARE``` and [HERE]() for the ```memorization_and_overparam``` work. If you have any questions about the codes or my work, please reach out to me here or on Twitter (@dbp_patel_1994).
+```
+All the codes have been shifted to [HERE](https://github.com/dbp1994/bare-wacv-2023) for ```BARE``` and [HERE]() for the ```memorization_and_overparam``` work. If you have any questions about the codes or my work, please reach out to me here or on Twitter (@dbp_patel_1994).
+```
 
 
 ## _BARE_
